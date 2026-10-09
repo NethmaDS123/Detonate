@@ -1,0 +1,8 @@
+# Legacy root install artifacts (use frontend/ and backend/ only)
+node_modules
+.venv
+.pnpm-store
+
+.DS_Store
+.env
+.env.local

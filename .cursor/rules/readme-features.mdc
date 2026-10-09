@@ -1,0 +1,24 @@
+---
+description: Keep the root README feature lists in sync with the product
+alwaysApply: true
+---
+
+# README features stay current
+
+`README.md` at the repo root is the product description. **What you can do now** is shipped behavior. **Planned** is work that is named in the code but not usable yet.
+
+When a change adds, removes, or changes a player-facing feature, game rule, difficulty, API capability, or roadmap item, edit `README.md` in the same change:
+
+- Move a planned item into **What you can do now** only after it works end to end.
+- Update or delete a bullet when behavior changes or a plan is dropped.
+- Do not list a feature that is not in the code.
+
+Leave install, test, and deploy steps in `frontend/README.md` and `backend/README.md`. Update those only when their commands or layout change.
+
+```markdown
+<!-- ❌ shipped chord, README still says flag and reveal only -->
+- Reveal a cell or flag a cell.
+
+<!-- ✅ same change updates the bullet -->
+- Reveal a cell, flag a cell, or chord a numbered cell.
+```
