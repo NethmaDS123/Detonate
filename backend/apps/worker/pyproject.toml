@@ -1,0 +1,16 @@
+[project]
+name = "detonate-worker"
+version = "0.1.0"
+description = "Detonate background jobs (daily board, outbox, rebuilds)"
+requires-python = ">=3.12"
+dependencies = [
+  "detonate-engine",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+
+[tool.uv.sources]
+detonate-engine = { workspace = true }
