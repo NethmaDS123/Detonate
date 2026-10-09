@@ -1,0 +1,62 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #0c0b0a;
+  --bg-raised: #161412;
+  --line: #2a2622;
+  --text: #ece7df;
+  --muted: #9a9288;
+  --accent: #c45c3e;
+  --safe: #7d9a6c;
+  --n1: #6ea4d4;
+  --n2: #7d9a6c;
+  --n3: #c45c3e;
+  --n4: #6b74c9;
+  --n5: #b33a2b;
+  --n6: #4aa3a8;
+  --n7: #d4c7b0;
+  --n8: #8a8278;
+}
+
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100%;
+}
+
+body {
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+.cell-num-1 {
+  color: var(--n1);
+}
+.cell-num-2 {
+  color: var(--n2);
+}
+.cell-num-3 {
+  color: var(--n3);
+}
+.cell-num-4 {
+  color: var(--n4);
+}
+.cell-num-5 {
+  color: var(--n5);
+}
+.cell-num-6 {
+  color: var(--n6);
+}
+.cell-num-7 {
+  color: var(--n7);
+}
+.cell-num-8 {
+  color: var(--n8);
+}
