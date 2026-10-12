@@ -2,7 +2,7 @@
 
 **Competitive Minesweeper.** Clear the board. Don't detonate.
 
-Detonate is a full-stack project built around a **deterministic, replayable** Minesweeper engine. The browser game runs entirely on the client today; the Python backend is the authority for rules and will back verified runs, daily boards, and leaderboards as those features ship.
+Detonate is a full-stack project built around a **deterministic, replayable** Minesweeper engine. The browser game runs entirely on the client; the Python backend is the authority for rules, verified runs, leaderboards, and the daily board. Accounts are next.
 
 Repository: [github.com/NethmaDS123/Detonate](https://github.com/NethmaDS123/Detonate)
 
@@ -31,7 +31,10 @@ Repository: [github.com/NethmaDS123/Detonate](https://github.com/NethmaDS123/Det
 - **Safe first click** — mines are placed after the opening click; the clicked cell and its neighbors (when possible) are never mines.
 - **Seeded boards** — same seed yields the same mine field; new board generates a new seed.
 - Mine counter, timer, win/loss handling (auto-flag on win, reveal mines on loss).
-- Backend **health**, **readiness** (Postgres + Redis checks), and **`GET /v1/difficulties`**.
+- Backend **health**, **readiness** (Postgres + Redis checks), **`GET /v1/difficulties`**, and **`POST /v1/runs/verify`** (replay move log with the canonical engine).
+- On win, the UI sends your move log to the API when it is reachable and shows **verified** when the server agrees; verified wins are **stored in Postgres** when the database is up.
+- **Leaderboard** of the fastest verified times per difficulty (`GET /v1/leaderboard`), shown under the board. Your latest saved win is marked when it places.
+- **Daily board** — one shared seed per difficulty per UTC day (`GET /v1/daily`); the worker publishes seeds to Redis, with the same deterministic fallback when Redis is empty.
 - Engine tests on both stacks; fixture export script to sync TS tests after Python rule changes.
 
 ### Roadmap
@@ -40,9 +43,6 @@ Not implemented yet; names and stubs exist in the codebase.
 
 | Feature | Intent |
 | --- | --- |
-| Verified runs | Submit a replay of moves; server re-simulates with the canonical engine. |
-| Daily board | One shared seed per day via the worker. |
-| Leaderboards | Ranked times tied to verified runs; UI uses `NEXT_PUBLIC_API_URL`. |
 | Accounts | Identity for ranked play. |
 
 ## Architecture
@@ -58,15 +58,16 @@ flowchart LR
   subgraph server["Backend (optional today)"]
     API["FastAPI"]
     PYE["Python engine"]
-    Worker["Worker stub"]
+    Worker["Worker"]
     API --> PYE
-    Worker -.-> PYE
+    Worker --> PYE
   end
 
   PG[(Postgres)]
   RD[(Redis)]
 
-  UI -. "future: verified runs" .-> API
+  UI -->|"verify, leaderboard, daily"| API
+  Worker --> RD
   API --> PG
   API --> RD
 
@@ -74,7 +75,7 @@ flowchart LR
   Fixtures --> TSE
 ```
 
-Play does **not** require the API. Postgres and Redis are only needed for `/ready` and upcoming ranked features.
+Play does **not** require the API. Postgres stores verified wins and serves the leaderboard. Redis holds published daily seeds (run the worker once per UTC day, or rely on the API fallback).
 
 ## Project layout
 

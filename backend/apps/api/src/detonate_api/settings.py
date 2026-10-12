@@ -11,3 +11,4 @@ DATABASE_URL = os.getenv(
     "postgresql://detonate:detonate@localhost:5432/detonate",
 )
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+RUNS_PERSIST = os.getenv("RUNS_PERSIST", "1").strip().lower() not in ("0", "false", "no")

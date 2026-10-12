@@ -5,7 +5,11 @@ description = "Detonate background jobs (daily board, outbox, rebuilds)"
 requires-python = ">=3.12"
 dependencies = [
   "detonate-engine",
+  "redis>=5.2",
 ]
+
+[project.scripts]
+detonate-worker = "detonate_worker.daily:main"
 
 [build-system]
 requires = ["hatchling"]

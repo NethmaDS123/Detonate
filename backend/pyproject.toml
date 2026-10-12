@@ -10,7 +10,7 @@ dependencies = []
 package = false
 
 [dependency-groups]
-dev = ["pytest>=8.3", "ruff>=0.8"]
+dev = ["httpx>=0.28", "pytest>=8.3", "ruff>=0.8"]
 
 [tool.uv.workspace]
 members = ["apps/api", "apps/worker", "packages/engine"]
@@ -19,8 +19,8 @@ members = ["apps/api", "apps/worker", "packages/engine"]
 detonate-engine = { workspace = true }
 
 [tool.pytest.ini_options]
-testpaths = ["packages/engine/tests"]
-pythonpath = ["packages/engine/src"]
+testpaths = ["packages/engine/tests", "apps/api/tests"]
+pythonpath = ["packages/engine/src", "apps/api/src"]
 
 [tool.ruff]
 target-version = "py312"

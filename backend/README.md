@@ -28,12 +28,26 @@ uv run --package detonate-api uvicorn detonate_api.main:app --reload --port 8000
 
 - Health: http://localhost:8000/health  
 - OpenAPI: http://localhost:8000/docs  
+- Verify a run: `POST /v1/runs/verify` (JSON body: `difficultyId`, `seed`, `events`, `status`, `durationMs`); verified wins are inserted into `runs` when Postgres is available (`RUNS_PERSIST=1`, default).
+- Leaderboard: `GET /v1/leaderboard?difficultyId=beginner&limit=10` — fastest stored wins for that difficulty.
+- Daily board: `GET /v1/daily?difficultyId=beginner` — today’s shared seed (UTC). Publish to Redis with the worker (below).
+
+## Daily worker
+
+Publishes today’s seeds to Redis (same values the API computes as fallback):
+
+```bash
+cd backend
+uv run --package detonate-worker detonate-worker
+```
+
+Schedule that once per UTC day in production.
 
 ## Tests
 
 ```bash
 cd backend
-uv run pytest packages/engine/tests
+uv run pytest packages/engine/tests apps/api/tests
 ```
 
 ## Export fixtures (sync frontend engine tests)
@@ -52,7 +66,7 @@ This writes `backend/fixtures/` and copies the same JSON into `../frontend/packa
 | Path | Purpose |
 | --- | --- |
 | `apps/api` | FastAPI HTTP API |
-| `apps/worker` | Jobs (daily board, outbox) — placeholder |
+| `apps/worker` | Daily board publish to Redis |
 | `packages/engine` | Authoritative Minesweeper rules |
 | `fixtures` | Golden replay JSON |
 | `docker-compose.yml` | Postgres + Redis |

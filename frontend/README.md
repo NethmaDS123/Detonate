@@ -24,6 +24,8 @@ pnpm dev
 
 Open http://localhost:3000
 
+With the API on port 8000, clearing a board triggers `POST /v1/runs/verify` and shows **verified** when the server replay matches. The page also loads `GET /v1/leaderboard` and, in **Daily** mode, `GET /v1/daily`. Override the API host with `NEXT_PUBLIC_API_URL` in `.env.local`.
+
 ## Tests (engine port vs Python fixtures)
 
 ```bash

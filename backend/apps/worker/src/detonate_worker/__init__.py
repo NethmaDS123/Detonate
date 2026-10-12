@@ -1,6 +1,6 @@
-def main() -> None:
-    print("Detonate worker placeholder. Daily board rotation lands after the run protocol.")
+from detonate_worker.daily import main
 
+__all__ = ["main"]
 
 if __name__ == "__main__":
     main()
