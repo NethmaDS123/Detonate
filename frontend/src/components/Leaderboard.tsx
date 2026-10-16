@@ -1,102 +1,152 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { fetchLeaderboard, type LeaderboardEntry } from "@/lib/leaderboard";
-
-const LIMIT = 10;
-
-function formatTime(ms: number): string {
-  const total = Math.max(0, Math.floor(ms / 1000));
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
+import { DIFFICULTIES } from "@detonate/engine";
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
+import { formatDate, formatDuration } from "@/lib/format";
+import {
+  fetchDailyLeaderboard,
+  fetchLeaderboard,
+  type LeaderboardEntry,
+} from "@/lib/leaderboard";
 
 export function Leaderboard({
   difficultyId,
-  label,
-  highlightRunId,
-  refreshKey,
+  limit = 10,
+  variant = "compact",
+  scope = "all",
+  highlightRunId = null,
+  refreshKey = 0,
 }: {
   difficultyId: string;
-  label: string;
-  highlightRunId: string | null;
-  refreshKey: number;
+  limit?: number;
+  variant?: "compact" | "full";
+  scope?: "all" | "daily";
+  highlightRunId?: string | null;
+  refreshKey?: number;
 }) {
-  const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
-  const [state, setState] = useState<"loading" | "ready" | "offline">("loading");
+  const [attempt, setAttempt] = useState(0);
+  const [result, setResult] = useState<{
+    key: string;
+    difficultyId: string;
+    entries: LeaderboardEntry[] | null;
+  } | null>(null);
+  const retry = useCallback(() => setAttempt((n) => n + 1), []);
+  const requestKey = `${scope}:${difficultyId}:${limit}:${refreshKey}:${attempt}`;
 
   useEffect(() => {
     let cancelled = false;
-    setState("loading");
-    void fetchLeaderboard(difficultyId, LIMIT)
-      .then((result) => {
-        if (cancelled) return;
-        setEntries(result.entries);
-        setState("ready");
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setEntries([]);
-          setState("offline");
-        }
-      });
+    const load =
+      scope === "daily"
+        ? fetchDailyLeaderboard(difficultyId, limit)
+        : fetchLeaderboard(difficultyId, limit);
+    void load.then(
+      (body) => {
+        if (!cancelled) setResult({ key: requestKey, difficultyId, entries: body.entries });
+      },
+      () => {
+        if (!cancelled) setResult({ key: requestKey, difficultyId, entries: null });
+      },
+    );
     return () => {
       cancelled = true;
     };
-  }, [difficultyId, refreshKey]);
+  }, [difficultyId, limit, requestKey, scope]);
 
-  const highlighted = highlightRunId
-    ? entries.some((entry) => entry.runId === highlightRunId)
-    : false;
+  const current = result?.difficultyId === difficultyId ? result : null;
+  const loading = result?.key !== requestKey;
+  const entries = current?.entries ?? [];
+  const state: "loading" | "ready" | "offline" =
+    current?.entries ? "ready" : loading || !current ? "loading" : "offline";
+
+  const label = DIFFICULTIES[difficultyId]?.label ?? difficultyId;
+  const full = variant === "full";
+  const daily = scope === "daily";
+  const highlighted = highlightRunId !== null && entries.some((e) => e.runId === highlightRunId);
+  const viewAllHref = daily
+    ? `/leaderboard?difficulty=${difficultyId}&board=daily`
+    : `/leaderboard?difficulty=${difficultyId}`;
 
   return (
-    <section className="w-full max-w-md border border-[var(--line)] bg-[var(--bg-raised)]">
-      <header className="flex items-baseline justify-between border-b border-[var(--line)] px-4 py-2">
-        <h2 className="font-mono text-xs tracking-[0.2em] text-[var(--muted)] uppercase">
-          Leaderboard
+    <section className="card overflow-hidden">
+      <header className="flex items-baseline justify-between gap-3 border-b border-[var(--line)] px-4 py-3">
+        <h2 className="text-sm font-medium">
+          {daily ? "Today's daily" : "Fastest times"}{" "}
+          <span className="text-[var(--muted)]">· {label}</span>
         </h2>
-        <span className="text-sm">{label}</span>
+        {!full && (
+          <Link href={viewAllHref} className="text-xs text-[var(--muted)] hover:text-[var(--text)]">
+            View all
+          </Link>
+        )}
       </header>
 
       {state === "loading" && (
-        <p className="px-4 py-3 font-mono text-sm text-[var(--muted)]">Loading times…</p>
+        <ul className="space-y-2 p-4" aria-label="Loading times">
+          {Array.from({ length: Math.min(limit, 5) }, (_, i) => (
+            <li key={i} className="h-5 animate-pulse rounded bg-[var(--line)]" />
+          ))}
+        </ul>
       )}
+
       {state === "offline" && (
-        <p className="px-4 py-3 font-mono text-sm text-[var(--muted)]">Leaderboard offline.</p>
+        <div className="space-y-3 px-4 py-5 text-sm">
+          <p className="text-[var(--muted)]">Can&apos;t reach the leaderboard right now.</p>
+          <button type="button" onClick={retry} className="btn btn-sm">
+            Try again
+          </button>
+        </div>
       )}
+
       {state === "ready" && entries.length === 0 && (
-        <p className="px-4 py-3 font-mono text-sm text-[var(--muted)]">No verified times yet.</p>
+        <p className="px-4 py-5 text-sm text-[var(--muted)]">
+          {daily
+            ? "No one has cleared today's daily yet. Be the first."
+            : "No verified times yet. Clear a board to set the first one."}
+        </p>
       )}
+
       {state === "ready" && entries.length > 0 && (
-        <table className="w-full font-mono text-sm">
+        <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-xs text-[var(--muted)]">
-              <th className="px-4 py-2 font-normal">#</th>
-              <th className="px-4 py-2 font-normal">Time</th>
-              <th className="px-4 py-2 font-normal">Seed</th>
+              <th className="w-12 px-4 py-2 font-normal">#</th>
+              <th className="px-2 py-2 font-normal">Player</th>
+              <th className="px-4 py-2 text-right font-normal">Time</th>
+              {full && <th className="hidden px-4 py-2 text-right font-normal sm:table-cell">Date</th>}
             </tr>
           </thead>
           <tbody>
             {entries.map((entry) => {
               const yours = entry.runId === highlightRunId;
               return (
-                <tr key={entry.runId} className={yours ? "bg-[#221c18]" : undefined}>
-                  <td className="px-4 py-1.5">{entry.rank}</td>
-                  <td className="px-4 py-1.5">
-                    {formatTime(entry.durationMs)}
-                    {yours && <span className="ml-2 text-emerald-400">you</span>}
+                <tr
+                  key={entry.runId}
+                  className={`border-t border-[var(--line)] ${yours ? "bg-[#231c17]" : ""}`}
+                >
+                  <td className="px-4 py-2 font-mono text-[var(--muted)]">{entry.rank}</td>
+                  <td className="truncate px-2 py-2">
+                    {entry.displayName ?? <span className="text-[var(--muted)]">Anonymous</span>}
+                    {yours && <span className="ml-2 text-xs text-emerald-400">you</span>}
                   </td>
-                  <td className="px-4 py-1.5 text-[var(--muted)]">{entry.seed}</td>
+                  <td className="px-4 py-2 text-right font-mono tabular-nums">
+                    {formatDuration(entry.durationMs)}
+                  </td>
+                  {full && (
+                    <td className="hidden px-4 py-2 text-right text-[var(--muted)] sm:table-cell">
+                      {formatDate(entry.createdAt)}
+                    </td>
+                  )}
                 </tr>
               );
             })}
           </tbody>
         </table>
       )}
+
       {state === "ready" && entries.length > 0 && highlightRunId && !highlighted && (
         <p className="border-t border-[var(--line)] px-4 py-2 text-xs text-[var(--muted)]">
-          Your time is outside the top {LIMIT}.
+          Your time is outside the top {limit}.
         </p>
       )}
     </section>

@@ -76,6 +76,7 @@ dependencies = [
     { name = "detonate-engine" },
     { name = "fastapi" },
     { name = "psycopg", extra = ["binary"] },
+    { name = "python-dotenv" },
     { name = "redis" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -85,6 +86,7 @@ requires-dist = [
     { name = "detonate-engine", editable = "packages/engine" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
+    { name = "python-dotenv", specifier = ">=1.0" },
     { name = "redis", specifier = ">=5.2" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32" },
 ]

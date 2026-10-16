@@ -11,8 +11,12 @@ def utc_today(now: datetime | None = None) -> date:
     return instant.date()
 
 
+def daily_id(day: date, difficulty_id: str) -> str:
+    return f"{day.isoformat()}:{difficulty_id}"
+
+
 def daily_seed(difficulty_id: str, day: date) -> int:
-    payload = f"{day.isoformat()}:{difficulty_id}".encode()
+    payload = daily_id(day, difficulty_id).encode()
     digest = hashlib.sha256(payload).digest()
     value = int.from_bytes(digest[:4], "big")
     return value % 0xFFFFFFFF or 1

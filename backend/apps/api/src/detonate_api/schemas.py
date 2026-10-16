@@ -3,7 +3,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+DISPLAY_NAME_PATTERN = r"^[A-Za-z0-9_]{2,24}$"
 
 MAX_EVENTS = 10_000
 
@@ -24,6 +26,9 @@ class VerifyRunRequest(BaseModel):
     events: list[RunEvent] = Field(min_length=1, max_length=MAX_EVENTS)
     status: Literal["won", "lost"]
     duration_ms: int = Field(alias="durationMs", ge=0, le=86_400_000)
+    board_kind: Literal["random", "daily"] = Field(default="random", alias="boardKind")
+    daily_id: str | None = Field(default=None, alias="dailyId", min_length=3, max_length=64)
+    mode: Literal["classic"] = "classic"
 
     @field_validator("seed")
     @classmethod
@@ -31,6 +36,14 @@ class VerifyRunRequest(BaseModel):
         if value > 0xFFFFFFFF:
             raise ValueError("seed must fit in an unsigned 32-bit integer")
         return value
+
+    @model_validator(mode="after")
+    def daily_metadata_consistent(self) -> VerifyRunRequest:
+        if self.board_kind == "daily" and not self.daily_id:
+            raise ValueError("dailyId is required when boardKind is daily")
+        if self.board_kind == "random" and self.daily_id is not None:
+            raise ValueError("dailyId must be omitted when boardKind is random")
+        return self
 
 
 class VerifyRunResponse(BaseModel):
@@ -53,12 +66,22 @@ class LeaderboardEntry(BaseModel):
     run_id: str = Field(alias="runId")
     duration_ms: int = Field(alias="durationMs")
     seed: int
+    display_name: str | None = Field(default=None, alias="displayName")
     created_at: datetime = Field(alias="createdAt")
 
 
 class LeaderboardResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
+    difficulty_id: str = Field(alias="difficultyId")
+    entries: list[LeaderboardEntry]
+
+
+class DailyLeaderboardResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    date: str
+    daily_id: str = Field(alias="dailyId")
     difficulty_id: str = Field(alias="difficultyId")
     entries: list[LeaderboardEntry]
 
@@ -73,3 +96,24 @@ class DailyBoardEntry(BaseModel):
 class DailyResponse(BaseModel):
     date: str
     boards: list[DailyBoardEntry]
+
+
+class CreateAccountRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    display_name: str = Field(alias="displayName", min_length=2, max_length=24, pattern=DISPLAY_NAME_PATTERN)
+
+
+class CreateAccountResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    player_id: str = Field(alias="playerId")
+    display_name: str = Field(alias="displayName")
+    token: str
+
+
+class AccountResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    player_id: str = Field(alias="playerId")
+    display_name: str = Field(alias="displayName")

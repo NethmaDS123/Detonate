@@ -15,9 +15,11 @@ The browser has its own TypeScript engine port; it must stay aligned via golden 
 ```bash
 cd backend
 uv sync --all-packages --group dev
-cp .env.example .env   # optional
-docker compose up -d   # optional until you need DB/Redis
+cp .env.example .env   # set DATABASE_URL (local Docker or Supabase — see ../docs/SUPABASE.md)
+docker compose up -d   # optional if using local Postgres/Redis instead of Supabase
 ```
+
+Hosted Postgres (Supabase): put the **Database URI** in `backend/.env` as `DATABASE_URL`. The API loads `.env` automatically and runs migrations on startup.
 
 ## Run API
 
@@ -30,7 +32,9 @@ uv run --package detonate-api uvicorn detonate_api.main:app --reload --port 8000
 - OpenAPI: http://localhost:8000/docs  
 - Verify a run: `POST /v1/runs/verify` (JSON body: `difficultyId`, `seed`, `events`, `status`, `durationMs`); verified wins are inserted into `runs` when Postgres is available (`RUNS_PERSIST=1`, default).
 - Leaderboard: `GET /v1/leaderboard?difficultyId=beginner&limit=10` — fastest stored wins for that difficulty.
+- Daily leaderboard: `GET /v1/daily/leaderboard?difficultyId=beginner&limit=10` — fastest verified clears for today’s daily board (UTC).
 - Daily board: `GET /v1/daily?difficultyId=beginner` — today’s shared seed (UTC). Publish to Redis with the worker (below).
+- Accounts: `POST /v1/accounts` with `{ "displayName": "you" }` returns a one-time token; send `Authorization: Bearer <token>` on verify to name leaderboard entries.
 
 ## Daily worker
 

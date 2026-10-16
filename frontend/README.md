@@ -24,7 +24,7 @@ pnpm dev
 
 Open http://localhost:3000
 
-With the API on port 8000, clearing a board triggers `POST /v1/runs/verify` and shows **verified** when the server replay matches. The page also loads `GET /v1/leaderboard` and, in **Daily** mode, `GET /v1/daily`. Override the API host with `NEXT_PUBLIC_API_URL` in `.env.local`.
+With the API on port 8000, clearing a board triggers `POST /v1/runs/verify` and shows **verified** when the server replay matches. The page also loads `GET /v1/leaderboard`, optional **Daily** mode via `GET /v1/daily`, and **Accounts** (`POST /v1/accounts` / token in `localStorage` for named leaderboard entries). Override the API host with `NEXT_PUBLIC_API_URL` in `.env.local`.
 
 ## Tests (engine port vs Python fixtures)
 
@@ -39,7 +39,9 @@ After backend engine changes, re-export fixtures from the **backend** repo folde
 
 | Path | Purpose |
 | --- | --- |
-| `src/` | Next.js App Router UI |
+| `src/app` | Routes: `/` home, `/daily`, `/play`, `/leaderboard`, `/account` |
+| `src/components` | Game board, leaderboard, account provider/view, site header |
+| `src/lib` | API clients (`account`, `daily`, `leaderboard`, `verifyRun`) and formatting helpers |
 | `packages/engine` | Browser Minesweeper engine (must match backend fixtures) |
 
 ## Deploy (typical)

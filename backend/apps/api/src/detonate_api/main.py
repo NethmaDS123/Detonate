@@ -4,31 +4,43 @@ from contextlib import asynccontextmanager
 from typing import Annotated
 
 import psycopg
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
+from detonate_api.accounts import DisplayNameTakenError, create_player
+from detonate_api.auth import optional_player, require_player
 from detonate_api.daily import resolve_daily_boards
-from detonate_api.db import ensure_schema, list_leaderboard
+from detonate_api.db import ensure_schema, list_daily_leaderboard, list_leaderboard
 from detonate_api.runs import verify_run
 from detonate_api.schemas import (
+    AccountResponse,
+    CreateAccountRequest,
+    CreateAccountResponse,
     DailyBoardEntry,
+    DailyLeaderboardResponse,
     DailyResponse,
     LeaderboardEntry,
     LeaderboardResponse,
     VerifyRunRequest,
     VerifyRunResponse,
 )
-from detonate_api.settings import DATABASE_URL, REDIS_URL, RUNS_PERSIST, cors_origins
+from detonate_api.settings import (
+    DATABASE_URL,
+    REDIS_URL,
+    RUNS_PERSIST,
+    cors_origins,
+    database_url_configured,
+)
 from detonate_engine import DIFFICULTIES
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     if RUNS_PERSIST:
-        try:
-            ensure_schema(DATABASE_URL)
-        except Exception:
-            pass
+        if not database_url_configured():
+            msg = "Set DATABASE_URL in backend/.env (Supabase URI). See docs/SUPABASE.md"
+            raise RuntimeError(msg)
+        ensure_schema(DATABASE_URL)
     yield
 
 
@@ -68,8 +80,31 @@ def ready() -> dict:
 
 
 @app.post("/v1/runs/verify", response_model=VerifyRunResponse)
-def runs_verify(body: VerifyRunRequest) -> VerifyRunResponse:
-    return verify_run(body)
+def runs_verify(
+    body: VerifyRunRequest,
+    player=Depends(optional_player),  # noqa: ANN001
+) -> VerifyRunResponse:
+    return verify_run(body, player)
+
+
+@app.post("/v1/accounts", response_model=CreateAccountResponse, status_code=201)
+def accounts_create(body: CreateAccountRequest) -> CreateAccountResponse:
+    try:
+        player, token = create_player(DATABASE_URL, body.display_name)
+    except DisplayNameTakenError as exc:
+        raise HTTPException(status_code=409, detail="display_name_taken") from exc
+    except psycopg.Error as exc:
+        raise HTTPException(status_code=503, detail="storage_unavailable") from exc
+    return CreateAccountResponse(
+        player_id=player.id,
+        display_name=player.display_name,
+        token=token,
+    )
+
+
+@app.get("/v1/accounts/me", response_model=AccountResponse)
+def accounts_me(player=Depends(require_player)) -> AccountResponse:  # noqa: ANN001
+    return AccountResponse(player_id=player.id, display_name=player.display_name)
 
 
 @app.get("/v1/leaderboard", response_model=LeaderboardResponse)
@@ -91,9 +126,45 @@ def leaderboard(
                 run_id=run_id,
                 duration_ms=duration_ms,
                 seed=seed,
+                display_name=display_name,
                 created_at=created_at,
             )
-            for index, (run_id, duration_ms, seed, created_at) in enumerate(rows, start=1)
+            for index, (run_id, duration_ms, seed, created_at, display_name) in enumerate(
+                rows, start=1
+            )
+        ],
+    )
+
+
+@app.get("/v1/daily/leaderboard", response_model=DailyLeaderboardResponse)
+def daily_leaderboard(
+    difficulty_id: Annotated[str, Query(alias="difficultyId", min_length=1)],
+    limit: Annotated[int, Query(ge=1, le=50)] = 10,
+) -> DailyLeaderboardResponse:
+    if difficulty_id not in DIFFICULTIES:
+        raise HTTPException(status_code=404, detail="unknown_difficulty")
+    day, _boards = resolve_daily_boards(REDIS_URL)
+    daily_id = f"{day}:{difficulty_id}"
+    try:
+        rows = list_daily_leaderboard(DATABASE_URL, daily_id, limit)
+    except psycopg.Error as exc:
+        raise HTTPException(status_code=503, detail="storage_unavailable") from exc
+    return DailyLeaderboardResponse(
+        date=day,
+        daily_id=daily_id,
+        difficulty_id=difficulty_id,
+        entries=[
+            LeaderboardEntry(
+                rank=index,
+                run_id=run_id,
+                duration_ms=duration_ms,
+                seed=seed,
+                display_name=display_name,
+                created_at=created_at,
+            )
+            for index, (run_id, duration_ms, seed, created_at, display_name) in enumerate(
+                rows, start=1
+            )
         ],
     )
 

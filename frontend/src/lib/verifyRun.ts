@@ -1,12 +1,17 @@
 import type { Event, Status } from "@detonate/engine";
 import { apiBase } from "@/lib/api";
 
+export type BoardKind = "random" | "daily";
+
 export type VerifyRunPayload = {
   difficultyId: string;
   seed: number;
   events: Event[];
   status: Extract<Status, "won" | "lost">;
   durationMs: number;
+  boardKind?: BoardKind;
+  dailyId?: string;
+  mode?: "classic";
 };
 
 export type VerifyRunResult = {
@@ -20,10 +25,15 @@ export type VerifyRunResult = {
   runId?: string | null;
 };
 
-export async function verifyRun(payload: VerifyRunPayload): Promise<VerifyRunResult> {
+export async function verifyRun(
+  payload: VerifyRunPayload,
+  token: string | null = null,
+): Promise<VerifyRunResult> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
   const res = await fetch(`${apiBase()}/v1/runs/verify`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(payload),
   });
   if (!res.ok) {

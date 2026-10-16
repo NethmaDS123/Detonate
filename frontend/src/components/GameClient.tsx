@@ -1,109 +1,147 @@
 "use client";
 
-import { DIFFICULTIES, Game, type Difficulty, type Event, type Status } from "@detonate/engine";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DIFFICULTIES, Game, type Cell, type Event, type Status } from "@detonate/engine";
+import Link from "next/link";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useAccount } from "@/components/AccountProvider";
 import { Leaderboard } from "@/components/Leaderboard";
 import { fetchDaily } from "@/lib/daily";
-import { verifyRun } from "@/lib/verifyRun";
+import { formatClock, formatDuration } from "@/lib/format";
+import { randomSeed } from "@/lib/seed";
+import {
+  verifyRun,
+  type BoardKind,
+  type VerifyRunPayload,
+  type VerifyRunResult,
+} from "@/lib/verifyRun";
 
-const difficultyList = Object.values(DIFFICULTIES);
+type VerifyState =
+  | { kind: "idle" }
+  | { kind: "pending" }
+  | { kind: "done"; result: VerifyRunResult }
+  | { kind: "unavailable" };
 
-function formatTime(ms: number): string {
-  const total = Math.max(0, Math.floor(ms / 1000));
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
+type Tone = "muted" | "good" | "bad";
 
-function statusLine(status: Status): string {
-  if (status === "won") return "Cleared.";
-  if (status === "lost") return "Detonated.";
+const CELL_SIZE: Record<string, number> = { beginner: 34, intermediate: 28, expert: 22 };
+
+const TONE_CLASS: Record<Tone, string> = {
+  muted: "text-[var(--muted)]",
+  good: "text-emerald-400",
+  bad: "text-[var(--accent)]",
+};
+
+function statusLabel(status: Status): string {
+  if (status === "won") return "Cleared";
+  if (status === "lost") return "Detonated";
   if (status === "in_progress") return "Don't.";
-  return "Click a cell.";
+  return "Click any cell";
 }
 
-export function GameClient() {
-  const [difficulty, setDifficulty] = useState<Difficulty>(DIFFICULTIES.beginner);
-  const [seed, setSeed] = useState(1);
-  const [mounted, setMounted] = useState(false);
-  const [revision, setRevision] = useState(0);
+function verifySummary(state: VerifyState): { tone: Tone; text: string } {
+  if (state.kind === "unavailable") {
+    return { tone: "muted", text: "Couldn't reach the server, so this win wasn't recorded." };
+  }
+  if (state.kind !== "done") {
+    return { tone: "muted", text: "Verifying with the server…" };
+  }
+  const { result } = state;
+  if (result.verified && result.stored) {
+    return { tone: "good", text: "Verified and saved to the leaderboard." };
+  }
+  if (result.verified) {
+    return { tone: "muted", text: "Verified, but the leaderboard couldn't save it right now." };
+  }
+  if (result.reason === "daily_mismatch") {
+    return { tone: "bad", text: "This daily board has expired. Load today's board to rank." };
+  }
+  return { tone: "bad", text: "The server replay didn't match this result, so it wasn't ranked." };
+}
+
+type BoardView = {
+  seed: number;
+  date: string | null;
+  status: Status;
+  remainingMines: number;
+  grid: Cell[][];
+};
+
+function snapshot(game: Game, date: string | null): BoardView {
+  return {
+    seed: game.seed,
+    date,
+    status: game.status,
+    remainingMines: game.remainingMines(),
+    grid: game.grid.map((row) => row.map((cell) => ({ ...cell }))),
+  };
+}
+
+export function GameClient({
+  boardKind,
+  difficultyId,
+  initialSeed,
+}: {
+  boardKind: BoardKind;
+  difficultyId: string;
+  initialSeed?: number;
+}) {
+  const difficulty = DIFFICULTIES[difficultyId] ?? DIFFICULTIES.beginner;
+  const { status: accountStatus, account, token } = useAccount();
+
+  const [initial] = useState(() => {
+    if (initialSeed === undefined) return { game: null, view: null };
+    const game = new Game(difficulty.width, difficulty.height, difficulty.mines, initialSeed);
+    return { game, view: snapshot(game, null) };
+  });
+  const gameRef = useRef<Game | null>(initial.game);
+  const eventsRef = useRef<Event[]>([]);
+  const [view, setView] = useState<BoardView | null>(initial.view);
+  const [dailyFailed, setDailyFailed] = useState(false);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [endedAt, setEndedAt] = useState<number | null>(null);
   const [now, setNow] = useState(0);
-  const gameRef = useRef<Game>(new Game(9, 9, 10, 1));
-  const eventsRef = useRef<Event[]>([]);
-  const [verifyState, setVerifyState] = useState<
-    "idle" | "pending" | "verified" | "failed" | "unavailable"
-  >("idle");
-  const [runStored, setRunStored] = useState(false);
+  const [verify, setVerify] = useState<VerifyState>({ kind: "idle" });
   const [highlightRunId, setHighlightRunId] = useState<string | null>(null);
   const [leaderboardTick, setLeaderboardTick] = useState(0);
-  const [boardMode, setBoardMode] = useState<"random" | "daily">("random");
-  const [dailyDate, setDailyDate] = useState<string | null>(null);
-  const [dailyState, setDailyState] = useState<"idle" | "loading" | "ready" | "offline">("idle");
 
-  useEffect(() => {
-    reset(DIFFICULTIES.beginner);
-    setMounted(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- deal a board once on the client
-  }, []);
-
-  const reset = useCallback(
-    (next: Difficulty, nextSeed?: number) => {
-      const resolvedSeed = nextSeed ?? ((Date.now() >>> 0) || 1);
-      setDifficulty(next);
-      setSeed(resolvedSeed);
-      gameRef.current = new Game(next.width, next.height, next.mines, resolvedSeed);
+  const deal = useCallback(
+    (seed: number, date: string | null) => {
+      const game = new Game(difficulty.width, difficulty.height, difficulty.mines, seed);
+      gameRef.current = game;
       eventsRef.current = [];
-      setVerifyState("idle");
-      setRunStored(false);
-      setHighlightRunId((current) => (next.id === difficulty.id ? current : null));
+      setView(snapshot(game, date));
+      setVerify({ kind: "idle" });
       setStartedAt(null);
       setEndedAt(null);
-      setRevision((n) => n + 1);
     },
-    [difficulty.id],
+    [difficulty],
   );
 
-  const loadDaily = useCallback(
-    async (next: Difficulty) => {
-      setDailyState("loading");
-      try {
-        const result = await fetchDaily(next.id);
-        reset(next, result.seed);
-        setDailyDate(result.date);
-        setDailyState("ready");
-      } catch {
-        setDailyState("offline");
-      }
-    },
-    [reset],
+  const requestDaily = useCallback(
+    () =>
+      fetchDaily(difficulty.id).then(
+        (result) => {
+          setDailyFailed(false);
+          deal(result.seed, result.date);
+        },
+        () => setDailyFailed(true),
+      ),
+    [deal, difficulty.id],
   );
 
-  const selectDifficulty = useCallback(
-    (next: Difficulty) => {
-      if (boardMode === "daily") {
-        void loadDaily(next);
-        return;
-      }
-      reset(next);
-    },
-    [boardMode, loadDaily, reset],
-  );
+  useEffect(() => {
+    if (boardKind === "daily") void requestDaily();
+  }, [boardKind, requestDaily]);
 
-  const selectBoardMode = useCallback(
-    (mode: "random" | "daily") => {
-      setBoardMode(mode);
-      if (mode === "daily") {
-        void loadDaily(difficulty);
-        return;
-      }
-      setDailyDate(null);
-      setDailyState("idle");
-      reset(difficulty);
-    },
-    [difficulty, loadDaily, reset],
-  );
+  const newBoard = useCallback(() => {
+    if (boardKind === "daily") {
+      setDailyFailed(false);
+      setView(null);
+      void requestDaily();
+      return;
+    }
+    deal(randomSeed(), null);
+  }, [boardKind, deal, requestDaily]);
 
   useEffect(() => {
     if (!startedAt || endedAt) return;
@@ -111,224 +149,266 @@ export function GameClient() {
     return () => window.clearInterval(id);
   }, [startedAt, endedAt]);
 
-  const bump = useCallback((startedThisAction: boolean) => {
-    const g = gameRef.current;
-    if (startedThisAction) {
+  const submitWin = useCallback(
+    (game: Game, date: string | null, durationMs: number) => {
+      const events = [...eventsRef.current];
+      const payload: VerifyRunPayload = {
+        difficultyId: difficulty.id,
+        seed: game.seed,
+        events,
+        status: "won",
+        durationMs,
+        boardKind,
+        mode: "classic",
+        ...(boardKind === "daily" && date ? { dailyId: `${date}:${difficulty.id}` } : {}),
+      };
+      setVerify({ kind: "pending" });
+      void verifyRun(payload, token).then(
+        (result) => {
+          if (gameRef.current !== game) return;
+          setVerify({ kind: "done", result });
+          if (result.stored && result.runId) {
+            setHighlightRunId(result.runId);
+            setLeaderboardTick((n) => n + 1);
+          }
+        },
+        () => {
+          if (gameRef.current === game) setVerify({ kind: "unavailable" });
+        },
+      );
+    },
+    [boardKind, difficulty.id, token],
+  );
+
+  const applyMove = useCallback(
+    (event: Event) => {
+      const game = gameRef.current;
+      if (!game || !view || game.status === "won" || game.status === "lost") return;
+      const wasReady = game.status === "ready";
+      eventsRef.current.push(event);
+      const status = game.apply(event);
+
       const t = Date.now();
-      setStartedAt(t);
-      setNow(t);
-    }
-    if (g.status === "won" || g.status === "lost") {
-      setEndedAt((prev) => prev ?? Date.now());
-    }
-    setRevision((n) => n + 1);
-  }, []);
+      const start = wasReady && status !== "ready" ? t : startedAt;
+      if (start !== startedAt) {
+        setStartedAt(start);
+        setNow(t);
+      }
+      if (status === "won" || status === "lost") {
+        setEndedAt(t);
+        if (status === "won" && start !== null) submitWin(game, view.date, t - start);
+      }
+      setView(snapshot(game, view.date));
+    },
+    [startedAt, submitWin, view],
+  );
 
   const onReveal = useCallback(
     (x: number, y: number) => {
-      const g = gameRef.current;
-      const wasReady = g.status === "ready";
-      const cell = g.cell(x, y);
-      const event: Event =
-        cell.revealed && cell.adjacent > 0
-          ? { type: "chord", x, y }
-          : { type: "reveal", x, y };
-      eventsRef.current.push(event);
-      if (event.type === "chord") {
-        g.chord(x, y);
-      } else {
-        g.reveal(x, y);
-      }
-      bump(wasReady && g.status !== "ready");
+      const cell = view?.grid[y][x];
+      if (!cell || cell.flagged) return;
+      applyMove({ type: cell.revealed && cell.adjacent > 0 ? "chord" : "reveal", x, y });
     },
-    [bump],
+    [applyMove, view],
   );
 
-  const onFlag = useCallback(
-    (x: number, y: number) => {
-      eventsRef.current.push({ type: "flag", x, y });
-      gameRef.current.flag(x, y);
-      bump(false);
-    },
-    [bump],
-  );
+  const onFlag = useCallback((x: number, y: number) => applyMove({ type: "flag", x, y }), [applyMove]);
 
-  useEffect(() => {
-    if (!endedAt || !startedAt || gameRef.current.status !== "won") return;
-    const events = [...eventsRef.current];
-    if (events.length === 0) return;
-
-    let cancelled = false;
-    setVerifyState("pending");
-    void verifyRun({
-      difficultyId: difficulty.id,
-      seed,
-      events,
-      status: "won",
-      durationMs: endedAt - startedAt,
-    })
-      .then((result) => {
-        if (cancelled) return;
-        setVerifyState(result.verified ? "verified" : "failed");
-        setRunStored(Boolean(result.stored));
-        if (result.stored && result.runId) {
-          setHighlightRunId(result.runId);
-          setLeaderboardTick((n) => n + 1);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setVerifyState("unavailable");
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [endedAt, startedAt, difficulty.id, seed]);
-
-  const cellSize = useMemo(() => {
-    if (difficulty.id === "expert") return 22;
-    if (difficulty.id === "intermediate") return 26;
-    return 32;
-  }, [difficulty.id]);
-
-  const game = gameRef.current;
-  const elapsed = endedAt && startedAt ? endedAt - startedAt : startedAt ? now - startedAt : 0;
-
-  if (!mounted) {
+  if (dailyFailed) {
     return (
-      <p className="font-mono text-sm text-[var(--muted)]">Dealing a board…</p>
+      <div className="card mx-auto w-full max-w-md p-6 text-center">
+        <p className="font-medium">Couldn&apos;t load today&apos;s board.</p>
+        <p className="mt-1 text-sm text-[var(--muted)]">
+          The daily board comes from the server. Check your connection and try again.
+        </p>
+        <div className="mt-5 flex flex-wrap justify-center gap-2">
+          <button type="button" className="btn btn-primary" onClick={newBoard}>
+            Try again
+          </button>
+          <Link className="btn" href={`/play?difficulty=${difficulty.id}`}>
+            Play classic instead
+          </Link>
+        </div>
+      </div>
     );
   }
 
+  if (!view) {
+    return (
+      <div className="card mx-auto flex h-64 w-full max-w-md items-center justify-center">
+        <p className="font-mono text-sm text-[var(--muted)]">Dealing a board…</p>
+      </div>
+    );
+  }
+
+  const finished = view.status === "won" || view.status === "lost";
+  const elapsed = startedAt ? (endedAt ?? now) - startedAt : 0;
+  const cellSize = CELL_SIZE[difficulty.id] ?? 28;
+  const playAgainLabel = boardKind === "daily" ? "Replay daily" : "New board";
+
   return (
-    <div className="flex flex-col items-center gap-8">
-      <header className="flex w-full max-w-5xl flex-col items-start gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="font-mono text-xs tracking-[0.28em] text-[var(--muted)] uppercase">
-            Detonate
-          </p>
-          <h1 className="text-4xl font-semibold tracking-tight">Don&apos;t.</h1>
-        </div>
-        <p className="max-w-xs text-sm text-[var(--muted)]">
-          Same rules as Minesweeper. The product is not detonating.
-        </p>
-      </header>
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+      <section className="flex min-w-0 flex-col items-center">
+        <div className="flex w-min max-w-full flex-col gap-3">
+          <div className="card flex items-center justify-between gap-6 px-4 py-2.5">
+            <div>
+              <p className="eyebrow text-[10px]">Mines</p>
+              <p className="font-mono text-lg tabular-nums">
+                {view.remainingMines.toString().padStart(3, "0")}
+              </p>
+            </div>
+            <p
+              className={`whitespace-nowrap text-sm font-medium ${view.status === "lost" ? "text-[var(--accent)]" : view.status === "won" ? "text-emerald-400" : "text-[var(--muted)]"}`}
+              aria-live="polite"
+            >
+              {statusLabel(view.status)}
+            </p>
+            <div className="text-right">
+              <p className="eyebrow text-[10px]">Time</p>
+              <p className="font-mono text-lg tabular-nums">{formatClock(elapsed)}</p>
+            </div>
+          </div>
 
-      <div className="flex flex-wrap items-center justify-center gap-2">
-        {difficultyList.map((d) => (
-          <button
-            key={d.id}
-            type="button"
-            onClick={() => selectDifficulty(d)}
-            className={`border px-3 py-1.5 text-sm transition-colors ${
-              difficulty.id === d.id
-                ? "border-[var(--accent)] text-[var(--text)]"
-                : "border-[var(--line)] text-[var(--muted)] hover:border-[var(--muted)]"
-            }`}
-          >
-            {d.label}
-          </button>
-        ))}
-      </div>
+          <div className="max-w-full overflow-x-auto">
+            <div
+              role="group"
+              aria-label={`${difficulty.label} board`}
+              className="card inline-grid gap-[2px] p-2"
+              style={{
+                gridTemplateColumns: `repeat(${difficulty.width}, ${cellSize}px)`,
+                gridAutoRows: `${cellSize}px`,
+              }}
+              onContextMenu={(e) => e.preventDefault()}
+            >
+              {view.grid.map((row, y) =>
+                row.map((cell, x) => (
+                  <CellView
+                    key={`${x}-${y}`}
+                    x={x}
+                    y={y}
+                    revealed={cell.revealed}
+                    flagged={cell.flagged}
+                    isMine={cell.isMine}
+                    adjacent={cell.adjacent}
+                    status={view.status}
+                    size={cellSize}
+                    onReveal={onReveal}
+                    onFlag={onFlag}
+                  />
+                )),
+              )}
+            </div>
+          </div>
 
-      <div className="flex flex-wrap items-center justify-center gap-2">
-        {(["random", "daily"] as const).map((mode) => (
-          <button
-            key={mode}
-            type="button"
-            onClick={() => selectBoardMode(mode)}
-            className={`border px-3 py-1.5 font-mono text-xs tracking-wide uppercase transition-colors ${
-              boardMode === mode
-                ? "border-[var(--accent)] text-[var(--text)]"
-                : "border-[var(--line)] text-[var(--muted)] hover:border-[var(--muted)]"
-            }`}
-          >
-            {mode}
-          </button>
-        ))}
-        {boardMode === "daily" && dailyState === "loading" && (
-          <span className="font-mono text-xs text-[var(--muted)]">loading daily…</span>
-        )}
-        {boardMode === "daily" && dailyState === "offline" && (
-          <span className="font-mono text-xs text-[var(--muted)]">daily offline</span>
-        )}
-      </div>
-
-      <div className="flex w-full max-w-5xl items-center justify-between gap-4 border border-[var(--line)] bg-[var(--bg-raised)] px-4 py-3 font-mono text-sm">
-        <span>
-          {game.remainingMines().toString().padStart(3, "0")}{" "}
-          <span className="text-[var(--muted)]">mines</span>
-        </span>
-        <span className={game.status === "lost" ? "text-[var(--accent)]" : ""}>
-          {statusLine(game.status)}
-          {verifyState === "pending" && (
-            <span className="ml-2 text-[var(--muted)]">· verifying…</span>
-          )}
-          {verifyState === "verified" && (
-            <span className="ml-2 text-emerald-400">
-              · verified{runStored ? ", saved" : ""}
-            </span>
-          )}
-          {verifyState === "failed" && (
-            <span className="ml-2 text-[var(--accent)]">· verify failed</span>
-          )}
-          {verifyState === "unavailable" && (
-            <span className="ml-2 text-[var(--muted)]">· verify offline</span>
-          )}
-        </span>
-        <span>{formatTime(elapsed)}</span>
-      </div>
-
-      <div
-        className="border border-[var(--line)] p-2"
-        onContextMenu={(e) => e.preventDefault()}
-        style={{
-          display: "grid",
-          gridTemplateColumns: `repeat(${difficulty.width}, ${cellSize}px)`,
-          gridTemplateRows: `repeat(${difficulty.height}, ${cellSize}px)`,
-        }}
-        data-revision={revision}
-      >
-        {game.grid.map((row, y) =>
-          row.map((cell, x) => (
-            <CellView
-              key={`${x}-${y}`}
-              x={x}
-              y={y}
-              revealed={cell.revealed}
-              flagged={cell.flagged}
-              isMine={cell.isMine}
-              adjacent={cell.adjacent}
-              status={game.status}
-              size={cellSize}
-              onReveal={onReveal}
-              onFlag={onFlag}
+          {finished ? (
+            <ResultCard
+              won={view.status === "won"}
+              elapsed={elapsed}
+              verify={verify}
+              signedInAs={accountStatus === "signed_in" ? (account?.displayName ?? null) : null}
+              playAgainLabel={playAgainLabel}
+              onPlayAgain={newBoard}
+              leaderboardHref={
+                boardKind === "daily"
+                  ? `/leaderboard?difficulty=${difficulty.id}&board=daily`
+                  : `/leaderboard?difficulty=${difficulty.id}`
+              }
             />
-          )),
-        )}
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-[var(--muted)]">
+              <span>Left-click reveals · right-click flags · click a number to chord</span>
+              <button type="button" className="btn btn-sm" onClick={newBoard}>
+                {boardKind === "daily" ? "Restart" : "New board"}
+              </button>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <aside className="flex flex-col gap-4">
+        <div className="card px-4 py-3 text-sm">
+          <p className="eyebrow">{boardKind === "daily" ? "Daily board" : "Classic"}</p>
+          <p className="mt-1">
+            {difficulty.label} · {difficulty.width}×{difficulty.height} · {difficulty.mines} mines
+          </p>
+          <p className="mt-1 text-xs text-[var(--muted)]">
+            {boardKind === "daily"
+              ? `Same board for everyone on ${view.date ?? "today"} (UTC).`
+              : `Seed ${view.seed}. Every new board is different.`}
+          </p>
+        </div>
+        <Leaderboard
+          difficultyId={difficulty.id}
+          scope={boardKind === "daily" ? "daily" : "all"}
+          highlightRunId={highlightRunId}
+          refreshKey={leaderboardTick}
+        />
+      </aside>
+    </div>
+  );
+}
+
+function ResultCard({
+  won,
+  elapsed,
+  verify,
+  signedInAs,
+  playAgainLabel,
+  onPlayAgain,
+  leaderboardHref,
+}: {
+  won: boolean;
+  elapsed: number;
+  verify: VerifyState;
+  signedInAs: string | null;
+  playAgainLabel: string;
+  onPlayAgain: () => void;
+  leaderboardHref: string;
+}) {
+  const summary = won ? verifySummary(verify) : null;
+  const saved = verify.kind === "done" && Boolean(verify.result.stored);
+
+  return (
+    <div className="card p-5" role="status">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className={`text-xl font-semibold ${won ? "text-emerald-400" : "text-[var(--accent)]"}`}>
+          {won ? "Cleared." : "Detonated."}
+        </p>
+        <p className="font-mono text-2xl tabular-nums">{formatDuration(elapsed)}</p>
       </div>
 
-      <div className="flex items-center gap-4 text-sm text-[var(--muted)]">
-        <button
-          type="button"
-          onClick={() =>
-            boardMode === "daily" ? void loadDaily(difficulty) : reset(difficulty)
-          }
-          className="border border-[var(--line)] px-4 py-2 text-[var(--text)] hover:border-[var(--muted)]"
-        >
-          {boardMode === "daily" ? "Retry daily" : "New board"}
+      {summary ? (
+        <p className={`mt-2 text-sm ${TONE_CLASS[summary.tone]}`}>{summary.text}</p>
+      ) : (
+        <p className="mt-2 text-sm text-[var(--muted)]">You hit a mine. Shake it off and go again.</p>
+      )}
+
+      {saved && (
+        <p className="mt-1 text-sm text-[var(--muted)]">
+          {signedInAs ? (
+            <>
+              Ranked as <span className="text-[var(--text)]">{signedInAs}</span>.
+            </>
+          ) : (
+            <>
+              Saved without a name.{" "}
+              <Link href="/account" className="text-[var(--text)] underline underline-offset-4">
+                Create an account
+              </Link>{" "}
+              to put your name on future wins.
+            </>
+          )}
+        </p>
+      )}
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button type="button" className="btn btn-primary" onClick={onPlayAgain}>
+          {playAgainLabel}
         </button>
-        <span className="font-mono text-xs">
-          {boardMode === "daily" && dailyDate ? `daily · ${dailyDate}` : `seed ${seed}`}
-        </span>
+        <Link href={leaderboardHref} className="btn">
+          Leaderboard
+        </Link>
       </div>
-
-      <Leaderboard
-        difficultyId={difficulty.id}
-        label={difficulty.label}
-        highlightRunId={highlightRunId}
-        refreshKey={leaderboardTick}
-      />
     </div>
   );
 }
@@ -356,14 +436,16 @@ function CellView({
   onReveal: (x: number, y: number) => void;
   onFlag: (x: number, y: number) => void;
 }) {
+  const finished = status === "won" || status === "lost";
   let content = "";
   let className =
-    "flex items-center justify-center border border-[var(--bg)] font-mono font-semibold select-none";
+    "flex items-center justify-center rounded-[3px] font-mono font-semibold select-none";
 
   if (!revealed) {
-    className += " bg-[#2b2622] hover:bg-[#352f2a]";
+    className += " bg-[#2b2622] shadow-[inset_0_-2px_0_rgba(0,0,0,0.35)]";
+    if (!finished) className += " hover:bg-[#3a332d]";
     if (flagged) {
-      content = "F";
+      content = "⚑";
       className += " text-[var(--accent)]";
     }
   } else if (isMine) {
@@ -373,7 +455,7 @@ function CellView({
         ? " bg-[var(--accent)] text-[#1a0f0c]"
         : " bg-[#2b2622] text-[var(--accent)]";
   } else {
-    className += " bg-[#12100e]";
+    className += " bg-[#14110f]";
     if (adjacent > 0) {
       content = String(adjacent);
       className += ` cell-num-${adjacent}`;
@@ -383,9 +465,10 @@ function CellView({
   return (
     <button
       type="button"
-      aria-label={`cell ${x},${y}`}
+      aria-label={`Row ${y + 1}, column ${x + 1}${flagged ? ", flagged" : ""}`}
       className={className}
-      style={{ width: size, height: size, fontSize: Math.max(12, size * 0.48) }}
+      style={{ width: size, height: size, fontSize: Math.max(12, size * 0.5) }}
+      disabled={finished}
       onClick={() => onReveal(x, y)}
       onContextMenu={(e) => {
         e.preventDefault();

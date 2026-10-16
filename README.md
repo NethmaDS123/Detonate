@@ -2,7 +2,7 @@
 
 **Competitive Minesweeper.** Clear the board. Don't detonate.
 
-Detonate is a full-stack project built around a **deterministic, replayable** Minesweeper engine. The browser game runs entirely on the client; the Python backend is the authority for rules, verified runs, leaderboards, and the daily board. Accounts are next.
+Detonate is a full-stack project built around a **deterministic, replayable** Minesweeper engine. The browser game runs entirely on the client; the Python backend is the authority for rules, verified runs, leaderboards, the daily board, and player accounts.
 
 Repository: [github.com/NethmaDS123/Detonate](https://github.com/NethmaDS123/Detonate)
 
@@ -32,18 +32,17 @@ Repository: [github.com/NethmaDS123/Detonate](https://github.com/NethmaDS123/Det
 - **Seeded boards** — same seed yields the same mine field; new board generates a new seed.
 - Mine counter, timer, win/loss handling (auto-flag on win, reveal mines on loss).
 - Backend **health**, **readiness** (Postgres + Redis checks), **`GET /v1/difficulties`**, and **`POST /v1/runs/verify`** (replay move log with the canonical engine).
-- On win, the UI sends your move log to the API when it is reachable and shows **verified** when the server agrees; verified wins are **stored in Postgres** when the database is up.
-- **Leaderboard** of the fastest verified times per difficulty (`GET /v1/leaderboard`), shown under the board. Your latest saved win is marked when it places.
-- **Daily board** — one shared seed per difficulty per UTC day (`GET /v1/daily`); the worker publishes seeds to Redis, with the same deterministic fallback when Redis is empty.
+- On win, the UI sends your move log to the API when it is reachable and shows **verified** when the server agrees; verified wins are **stored in Postgres** when the database is up (tagged **random** or **daily** with a `dailyId` like `YYYY-MM-DD:difficulty`).
+- **Leaderboard** of the fastest verified times per difficulty (`GET /v1/leaderboard`), shown beside the board and on its own page. Your latest saved win is marked when it places.
+- **Daily leaderboard** — fastest verified clears on today’s shared board only (`GET /v1/daily/leaderboard`); shown on Daily play and on the Leaderboard page under **Today’s daily**.
+- **Daily board** — one shared seed per difficulty per UTC day (`GET /v1/daily`); the worker publishes seeds to Redis, with the same deterministic fallback when Redis is empty. Daily submissions must match that day's seed (today or yesterday, UTC) or they are rejected.
+- **Accounts** — create a display name, receive a bearer token, and attach verified wins to your name on the leaderboard (`POST /v1/accounts`, `GET /v1/accounts/me`).
+- **App pages** — home, **Daily** and **Classic** play screens with difficulty tabs, a full **Leaderboard** page, and an **Account** page for creating an account or signing in with a token; the header shows who is signed in.
 - Engine tests on both stacks; fixture export script to sync TS tests after Python rule changes.
 
-### Roadmap
+### Build order
 
-Not implemented yet; names and stubs exist in the codebase.
-
-| Feature | Intent |
-| --- | --- |
-| Accounts | Identity for ranked play. |
+Competitive platform backlog (V1 → V5, modes, Clerk, scale, themes): **[`docs/BUILD_ORDER.md`](docs/BUILD_ORDER.md)** — say **build next** to implement the next unchecked item.
 
 ## Architecture
 
@@ -84,7 +83,7 @@ Detonate/
 ├── frontend/          # Next.js app + @detonate/engine
 ├── backend/
 │   ├── apps/api/      # HTTP API
-│   ├── apps/worker/   # Daily board / jobs (placeholder)
+│   ├── apps/worker/   # Daily board publish
 │   ├── packages/engine/
 │   └── fixtures/      # Exported golden replays
 └── README.md          # You are here

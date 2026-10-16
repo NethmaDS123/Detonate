@@ -1,6 +1,6 @@
 from datetime import date
 
-from detonate_engine.daily import daily_boards, daily_seed
+from detonate_engine.daily import daily_boards, daily_id, daily_seed
 from detonate_engine.difficulties import DIFFICULTIES
 
 
@@ -17,6 +17,10 @@ def test_daily_seed_varies_by_difficulty_and_day() -> None:
     other_day = date(2026, 10, 12)
     assert daily_seed("beginner", day) != daily_seed("intermediate", day)
     assert daily_seed("beginner", day) != daily_seed("beginner", other_day)
+
+
+def test_daily_id_format() -> None:
+    assert daily_id(date(2026, 10, 14), "beginner") == "2026-10-14:beginner"
 
 
 def test_daily_boards_cover_all_difficulties() -> None:
