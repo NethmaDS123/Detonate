@@ -53,6 +53,39 @@ export async function fetchAccount(token: string): Promise<Account> {
   return res.json() as Promise<Account>;
 }
 
+export async function syncClerkAccount(
+  token: string,
+  displayName?: string,
+): Promise<Account> {
+  const res = await fetch(`${apiBase()}/v1/accounts/clerk/sync`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(displayName ? { displayName } : {}),
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, `clerk sync failed (${res.status})`);
+  }
+  return res.json() as Promise<Account>;
+}
+
+export async function linkLegacyAccount(token: string, legacyToken: string): Promise<Account> {
+  const res = await fetch(`${apiBase()}/v1/accounts/clerk/link`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ legacyToken }),
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, `clerk link failed (${res.status})`);
+  }
+  return res.json() as Promise<Account>;
+}
+
 export async function createAccount(displayName: string): Promise<CreateAccountResult> {
   const res = await fetch(`${apiBase()}/v1/accounts`, {
     method: "POST",

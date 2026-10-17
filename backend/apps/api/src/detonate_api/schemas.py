@@ -57,6 +57,13 @@ class VerifyRunResponse(BaseModel):
     reason: str | None = None
     stored: bool = False
     run_id: str | None = Field(default=None, alias="runId")
+    daily_rank: int | None = Field(default=None, alias="dailyRank", ge=1)
+    daily_total: int | None = Field(default=None, alias="dailyTotal", ge=1)
+    personal_best_ms: int | None = Field(default=None, alias="personalBestMs", ge=0)
+    previous_personal_best_ms: int | None = Field(
+        default=None, alias="previousPersonalBestMs", ge=0
+    )
+    is_personal_best: bool | None = Field(default=None, alias="isPersonalBest")
 
 
 class LeaderboardEntry(BaseModel):
@@ -81,8 +88,10 @@ class DailyLeaderboardResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     date: str
+    daily_number: int = Field(alias="dailyNumber", ge=1)
     daily_id: str = Field(alias="dailyId")
     difficulty_id: str = Field(alias="difficultyId")
+    best_duration_ms: int | None = Field(default=None, alias="bestDurationMs", ge=0)
     entries: list[LeaderboardEntry]
 
 
@@ -91,10 +100,17 @@ class DailyBoardEntry(BaseModel):
 
     difficulty_id: str = Field(alias="difficultyId")
     seed: int
+    width: int = Field(ge=1)
+    height: int = Field(ge=1)
+    mines: int = Field(ge=0)
+    best_duration_ms: int | None = Field(default=None, alias="bestDurationMs", ge=0)
 
 
 class DailyResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     date: str
+    daily_number: int = Field(alias="dailyNumber", ge=1)
     boards: list[DailyBoardEntry]
 
 
@@ -117,3 +133,34 @@ class AccountResponse(BaseModel):
 
     player_id: str = Field(alias="playerId")
     display_name: str = Field(alias="displayName")
+
+
+class PersonalBestEntry(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    difficulty_id: str = Field(alias="difficultyId")
+    duration_ms: int = Field(alias="durationMs")
+    run_id: str = Field(alias="runId")
+    created_at: datetime = Field(alias="createdAt")
+    daily_id: str | None = Field(default=None, alias="dailyId")
+
+
+class PersonalBestsResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    classic: list[PersonalBestEntry]
+    daily: list[PersonalBestEntry]
+
+
+class ClerkSyncRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    display_name: str | None = Field(
+        default=None, alias="displayName", min_length=2, max_length=24, pattern=DISPLAY_NAME_PATTERN
+    )
+
+
+class ClerkLinkRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    legacy_token: str = Field(alias="legacyToken", min_length=16, max_length=512)

@@ -16,7 +16,9 @@ export type LeaderboardResult = {
 
 export type DailyLeaderboardResult = LeaderboardResult & {
   date: string;
+  dailyNumber: number;
   dailyId: string;
+  bestDurationMs?: number | null;
 };
 
 export async function fetchLeaderboard(

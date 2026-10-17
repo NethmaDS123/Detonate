@@ -1,6 +1,6 @@
 from datetime import date
 
-from detonate_engine.daily import daily_boards, daily_id, daily_seed
+from detonate_engine.daily import DAILY_EPOCH, daily_boards, daily_id, daily_number, daily_seed
 from detonate_engine.difficulties import DIFFICULTIES
 
 
@@ -26,3 +26,8 @@ def test_daily_id_format() -> None:
 def test_daily_boards_cover_all_difficulties() -> None:
     boards = daily_boards(date(2026, 1, 1))
     assert set(boards) == set(DIFFICULTIES)
+
+
+def test_daily_number_starts_at_epoch() -> None:
+    assert daily_number(DAILY_EPOCH) == 1
+    assert daily_number(date(2026, 1, 2)) == 2

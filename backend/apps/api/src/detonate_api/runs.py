@@ -2,9 +2,13 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from detonate_api.auth import Player
+from detonate_api.types_player import Player
 from detonate_api.daily import resolve_daily_boards
-from detonate_api.db import persist_verified_win
+from detonate_api.db import (
+    daily_run_placement,
+    persist_verified_win,
+    player_best_duration_ms,
+)
 from detonate_api.schemas import VerifyRunRequest, VerifyRunResponse
 from detonate_api.settings import DATABASE_URL, REDIS_URL, RUNS_PERSIST
 from detonate_engine import DIFFICULTIES
@@ -75,9 +79,33 @@ def verify_run(body: VerifyRunRequest, player: Player | None = None) -> VerifyRu
     if not verified or body.status != "won" or not RUNS_PERSIST:
         return response
 
+    previous_best_ms: int | None = None
+    if player is not None:
+        previous_best_ms = player_best_duration_ms(
+            DATABASE_URL, player.id, body.difficulty_id, body.board_kind
+        )
+
     try:
         run_id = persist_verified_win(DATABASE_URL, body, player.id if player else None)
     except Exception:
         return response.model_copy(update={"stored": False, "reason": "storage_unavailable"})
 
-    return response.model_copy(update={"stored": True, "run_id": run_id})
+    update: dict[str, object] = {"stored": True, "run_id": run_id}
+    if player is not None:
+        current_best = min(
+            body.duration_ms,
+            previous_best_ms if previous_best_ms is not None else body.duration_ms,
+        )
+        update["personal_best_ms"] = current_best
+        update["previous_personal_best_ms"] = previous_best_ms
+        update["is_personal_best"] = (
+            previous_best_ms is None or body.duration_ms < previous_best_ms
+        )
+    if body.board_kind == "daily" and body.daily_id:
+        placement = daily_run_placement(DATABASE_URL, body.daily_id, run_id)
+        if placement is not None:
+            rank, total = placement
+            update["daily_rank"] = rank
+            update["daily_total"] = total
+
+    return response.model_copy(update=update)

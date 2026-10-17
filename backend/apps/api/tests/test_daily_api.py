@@ -7,7 +7,8 @@ from fastapi.testclient import TestClient
 from detonate_api.daily import resolve_daily_boards
 from detonate_api.main import app
 from detonate_api.settings import REDIS_URL
-from detonate_engine.daily import daily_redis_key, daily_seed, utc_today
+from detonate_engine.daily import daily_number, daily_redis_key, daily_seed, utc_today
+from detonate_engine.difficulties import DIFFICULTIES
 
 client = TestClient(app)
 
@@ -24,7 +25,18 @@ def test_daily_returns_computed_seed_without_redis_entry() -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["date"] == today.isoformat()
-    assert body["boards"] == [{"difficultyId": "beginner", "seed": expected}]
+    assert body["dailyNumber"] == daily_number(today)
+    beginner = DIFFICULTIES["beginner"]
+    assert body["boards"] == [
+        {
+            "difficultyId": "beginner",
+            "seed": expected,
+            "width": beginner.width,
+            "height": beginner.height,
+            "mines": beginner.mines,
+            "bestDurationMs": None,
+        },
+    ]
 
 
 def test_daily_all_difficulties() -> None:

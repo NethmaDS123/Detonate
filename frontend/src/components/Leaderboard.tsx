@@ -7,6 +7,7 @@ import { formatDate, formatDuration } from "@/lib/format";
 import {
   fetchDailyLeaderboard,
   fetchLeaderboard,
+  type DailyLeaderboardResult,
   type LeaderboardEntry,
 } from "@/lib/leaderboard";
 
@@ -30,6 +31,8 @@ export function Leaderboard({
     key: string;
     difficultyId: string;
     entries: LeaderboardEntry[] | null;
+    dailyNumber?: number;
+    bestDurationMs?: number | null;
   } | null>(null);
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
   const requestKey = `${scope}:${difficultyId}:${limit}:${refreshKey}:${attempt}`;
@@ -42,7 +45,19 @@ export function Leaderboard({
         : fetchLeaderboard(difficultyId, limit);
     void load.then(
       (body) => {
-        if (!cancelled) setResult({ key: requestKey, difficultyId, entries: body.entries });
+        if (cancelled) return;
+        if (scope === "daily") {
+          const daily = body as DailyLeaderboardResult;
+          setResult({
+            key: requestKey,
+            difficultyId,
+            entries: daily.entries,
+            dailyNumber: daily.dailyNumber,
+            bestDurationMs: daily.bestDurationMs,
+          });
+          return;
+        }
+        setResult({ key: requestKey, difficultyId, entries: body.entries });
       },
       () => {
         if (!cancelled) setResult({ key: requestKey, difficultyId, entries: null });
@@ -60,8 +75,11 @@ export function Leaderboard({
     current?.entries ? "ready" : loading || !current ? "loading" : "offline";
 
   const label = DIFFICULTIES[difficultyId]?.label ?? difficultyId;
+  const difficulty = DIFFICULTIES[difficultyId];
   const full = variant === "full";
   const daily = scope === "daily";
+  const dailyNumber = current?.dailyNumber;
+  const bestDurationMs = current?.bestDurationMs;
   const highlighted = highlightRunId !== null && entries.some((e) => e.runId === highlightRunId);
   const viewAllHref = daily
     ? `/leaderboard?difficulty=${difficultyId}&board=daily`
@@ -69,11 +87,19 @@ export function Leaderboard({
 
   return (
     <section className="card overflow-hidden">
-      <header className="flex items-baseline justify-between gap-3 border-b border-[var(--line)] px-4 py-3">
-        <h2 className="text-sm font-medium">
-          {daily ? "Today's daily" : "Fastest times"}{" "}
-          <span className="text-[var(--muted)]">· {label}</span>
-        </h2>
+      <header className="flex flex-col gap-1 border-b border-[var(--line)] px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between">
+        <div>
+          <h2 className="text-sm font-medium">
+            {daily && dailyNumber != null ? `Daily #${dailyNumber}` : daily ? "Today's daily" : "Fastest times"}{" "}
+            <span className="text-[var(--muted)]">· {label}</span>
+          </h2>
+          {daily && difficulty ? (
+            <p className="text-xs text-[var(--muted)]">
+              {difficulty.width}×{difficulty.height} · {difficulty.mines} mines
+              {bestDurationMs != null ? ` · Best ${formatDuration(bestDurationMs)}` : ""}
+            </p>
+          ) : null}
+        </div>
         {!full && (
           <Link href={viewAllHref} className="text-xs text-[var(--muted)] hover:text-[var(--text)]">
             View all

@@ -4,7 +4,9 @@ import { DIFFICULTIES, Game, type Cell, type Event, type Status } from "@detonat
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAccount } from "@/components/AccountProvider";
+import { DailyBranding } from "@/components/DailyBranding";
 import { Leaderboard } from "@/components/Leaderboard";
+import { ShareResultButton } from "@/components/ShareResultButton";
 import { fetchDaily } from "@/lib/daily";
 import { formatClock, formatDuration } from "@/lib/format";
 import { randomSeed } from "@/lib/seed";
@@ -38,7 +40,10 @@ function statusLabel(status: Status): string {
   return "Click any cell";
 }
 
-function verifySummary(state: VerifyState): { tone: Tone; text: string } {
+function verifySummary(
+  state: VerifyState,
+  boardKind: BoardKind,
+): { tone: Tone; text: string } {
   if (state.kind === "unavailable") {
     return { tone: "muted", text: "Couldn't reach the server, so this win wasn't recorded." };
   }
@@ -47,6 +52,16 @@ function verifySummary(state: VerifyState): { tone: Tone; text: string } {
   }
   const { result } = state;
   if (result.verified && result.stored) {
+    if (
+      boardKind === "daily" &&
+      result.dailyRank != null &&
+      result.dailyTotal != null
+    ) {
+      return {
+        tone: "good",
+        text: `Verified — #${result.dailyRank} of ${result.dailyTotal} on today's daily.`,
+      };
+    }
     return { tone: "good", text: "Verified and saved to the leaderboard." };
   }
   if (result.verified) {
@@ -56,6 +71,26 @@ function verifySummary(state: VerifyState): { tone: Tone; text: string } {
     return { tone: "bad", text: "This daily board has expired. Load today's board to rank." };
   }
   return { tone: "bad", text: "The server replay didn't match this result, so it wasn't ranked." };
+}
+
+function personalBestCopy(
+  verify: VerifyState,
+  boardKind: BoardKind,
+): { tone: Tone; text: string } | null {
+  if (verify.kind !== "done" || !verify.result.stored || verify.result.isPersonalBest == null) {
+    return null;
+  }
+  const mode = boardKind === "daily" ? "Daily" : "Classic";
+  if (verify.result.isPersonalBest) {
+    return { tone: "good", text: `New ${mode} personal best!` };
+  }
+  if (verify.result.personalBestMs != null) {
+    return {
+      tone: "muted",
+      text: `Your ${mode.toLowerCase()} best is ${formatDuration(verify.result.personalBestMs)}.`,
+    };
+  }
+  return null;
 }
 
 type BoardView = {
@@ -103,6 +138,10 @@ export function GameClient({
   const [verify, setVerify] = useState<VerifyState>({ kind: "idle" });
   const [highlightRunId, setHighlightRunId] = useState<string | null>(null);
   const [leaderboardTick, setLeaderboardTick] = useState(0);
+  const [dailyBranding, setDailyBranding] = useState<{
+    dailyNumber: number;
+    bestDurationMs: number | null;
+  } | null>(null);
 
   const deal = useCallback(
     (seed: number, date: string | null) => {
@@ -122,6 +161,10 @@ export function GameClient({
       fetchDaily(difficulty.id).then(
         (result) => {
           setDailyFailed(false);
+          setDailyBranding({
+            dailyNumber: result.dailyNumber,
+            bestDurationMs: result.bestDurationMs,
+          });
           deal(result.seed, result.date);
         },
         () => setDailyFailed(true),
@@ -132,6 +175,16 @@ export function GameClient({
   useEffect(() => {
     if (boardKind === "daily") void requestDaily();
   }, [boardKind, requestDaily]);
+
+  useEffect(() => {
+    if (boardKind !== "daily" || leaderboardTick === 0) return;
+    void fetchDaily(difficulty.id).then((result) => {
+      setDailyBranding({
+        dailyNumber: result.dailyNumber,
+        bestDurationMs: result.bestDurationMs,
+      });
+    });
+  }, [boardKind, difficulty.id, leaderboardTick]);
 
   const newBoard = useCallback(() => {
     if (boardKind === "daily") {
@@ -305,6 +358,12 @@ export function GameClient({
               won={view.status === "won"}
               elapsed={elapsed}
               verify={verify}
+              boardKind={boardKind}
+              difficultyId={difficulty.id}
+              difficultyLabel={difficulty.label}
+              seed={view.seed}
+              dailyNumber={dailyBranding?.dailyNumber ?? null}
+              dailyDate={view.date}
               signedInAs={accountStatus === "signed_in" ? (account?.displayName ?? null) : null}
               playAgainLabel={playAgainLabel}
               onPlayAgain={newBoard}
@@ -327,15 +386,25 @@ export function GameClient({
 
       <aside className="flex flex-col gap-4">
         <div className="card px-4 py-3 text-sm">
-          <p className="eyebrow">{boardKind === "daily" ? "Daily board" : "Classic"}</p>
-          <p className="mt-1">
-            {difficulty.label} · {difficulty.width}×{difficulty.height} · {difficulty.mines} mines
-          </p>
-          <p className="mt-1 text-xs text-[var(--muted)]">
-            {boardKind === "daily"
-              ? `Same board for everyone on ${view.date ?? "today"} (UTC).`
-              : `Seed ${view.seed}. Every new board is different.`}
-          </p>
+          {boardKind === "daily" && dailyBranding && view.date ? (
+            <DailyBranding
+              dailyNumber={dailyBranding.dailyNumber}
+              difficulty={difficulty}
+              bestDurationMs={dailyBranding.bestDurationMs}
+              date={view.date}
+            />
+          ) : (
+            <>
+              <p className="eyebrow">Classic</p>
+              <p className="mt-1">
+                {difficulty.label} · {difficulty.width}×{difficulty.height} · {difficulty.mines}{" "}
+                mines
+              </p>
+              <p className="mt-1 text-xs text-[var(--muted)]">
+                Seed {view.seed}. Every new board is different.
+              </p>
+            </>
+          )}
         </div>
         <Leaderboard
           difficultyId={difficulty.id}
@@ -352,6 +421,12 @@ function ResultCard({
   won,
   elapsed,
   verify,
+  boardKind,
+  difficultyId,
+  difficultyLabel,
+  seed,
+  dailyNumber,
+  dailyDate,
   signedInAs,
   playAgainLabel,
   onPlayAgain,
@@ -360,13 +435,26 @@ function ResultCard({
   won: boolean;
   elapsed: number;
   verify: VerifyState;
+  boardKind: BoardKind;
+  difficultyId: string;
+  difficultyLabel: string;
+  seed: number;
+  dailyNumber: number | null;
+  dailyDate: string | null;
   signedInAs: string | null;
   playAgainLabel: string;
   onPlayAgain: () => void;
   leaderboardHref: string;
 }) {
-  const summary = won ? verifySummary(verify) : null;
+  const summary = won ? verifySummary(verify, boardKind) : null;
+  const personalBest = won ? personalBestCopy(verify, boardKind) : null;
   const saved = verify.kind === "done" && Boolean(verify.result.stored);
+  const dailyPlacement =
+    verify.kind === "done" &&
+    verify.result.dailyRank != null &&
+    verify.result.dailyTotal != null
+      ? { rank: verify.result.dailyRank, total: verify.result.dailyTotal }
+      : null;
 
   return (
     <div className="card p-5" role="status">
@@ -377,11 +465,22 @@ function ResultCard({
         <p className="font-mono text-2xl tabular-nums">{formatDuration(elapsed)}</p>
       </div>
 
+      {won && dailyPlacement ? (
+        <p className="mt-3 font-mono text-3xl tabular-nums text-emerald-400">
+          #{dailyPlacement.rank}
+          <span className="text-lg text-[var(--muted)]"> / {dailyPlacement.total}</span>
+        </p>
+      ) : null}
+
       {summary ? (
         <p className={`mt-2 text-sm ${TONE_CLASS[summary.tone]}`}>{summary.text}</p>
       ) : (
         <p className="mt-2 text-sm text-[var(--muted)]">You hit a mine. Shake it off and go again.</p>
       )}
+
+      {personalBest ? (
+        <p className={`mt-1 text-sm ${TONE_CLASS[personalBest.tone]}`}>{personalBest.text}</p>
+      ) : null}
 
       {saved && (
         <p className="mt-1 text-sm text-[var(--muted)]">
@@ -405,6 +504,18 @@ function ResultCard({
         <button type="button" className="btn btn-primary" onClick={onPlayAgain}>
           {playAgainLabel}
         </button>
+        <ShareResultButton
+          boardKind={boardKind}
+          difficultyId={difficultyId}
+          difficultyLabel={difficultyLabel}
+          won={won}
+          durationMs={elapsed}
+          seed={seed}
+          dailyNumber={dailyNumber}
+          dailyDate={dailyDate}
+          dailyRank={verify.kind === "done" ? verify.result.dailyRank : null}
+          dailyTotal={verify.kind === "done" ? verify.result.dailyTotal : null}
+        />
         <Link href={leaderboardHref} className="btn">
           Leaderboard
         </Link>

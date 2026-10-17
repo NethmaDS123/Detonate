@@ -24,13 +24,13 @@ Goal: competitive social Minesweeper platform (daily loop → social → ranked 
 - [x] **8.** Run metadata — migration: `board_kind` (random | daily), `daily_id` (UTC date + difficulty), optional `mode`; indexes for daily queries
 - [x] **9.** Daily submit rules — verify accepts daily context; reject wrong seed/day for ranked daily runs
 - [x] **10.** Daily leaderboard — fastest verified times **for today’s daily board only**; API + UI
-- [ ] **11.** Daily rank on result — after clear: global rank `#n / total` for that daily (requires count query or rank function)
-- [ ] **12.** Personal bests — API + UI: best per difficulty, best daily, show after win and on profile stub
-- [ ] **13.** Daily branding — `DAILY #N` (day index), dedicated copy/stats line (mines, size, best time)
-- [ ] **14.** Home / landing — hero **Play today’s board**, daily stats when API has data
-- [ ] **15.** Shareable result — post-game **Share** (copy text + link); recipient opens same board/challenge context
-- [ ] **16.** Share preview — OG/meta or generated image card (time, rank, mini grid) for X/Discord/WhatsApp
-- [ ] **17.** Clerk + Google sign-in — replace bare-token UX; map Clerk user → player; migration path from token accounts
+- [x] **11.** Daily rank on result — after clear: global rank `#n / total` for that daily (requires count query or rank function)
+- [x] **12.** Personal bests — API + UI: best per difficulty, best daily, show after win and on profile stub
+- [x] **13.** Daily branding — `DAILY #N` (day index), dedicated copy/stats line (mines, size, best time)
+- [x] **14.** Home / landing — hero **Play today’s board**, daily stats when API has data
+- [x] **15.** Shareable result — post-game **Share** (copy text + link); recipient opens same board/challenge context
+- [x] **16.** Share preview — OG/meta or generated image card (time, rank, mini grid) for X/Discord/WhatsApp
+- [x] **17.** Clerk + Google sign-in — replace bare-token UX; map Clerk user → player; migration path from token accounts
 - [ ] **18.** Production deploy — API + frontend Dockerfiles or PaaS docs; env checklist; live demo URL in README when real
 - [ ] **19.** CI — GitHub Actions: Python engine + API tests (Postgres service), frontend engine tests
 - [ ] **20.** Scheduled daily worker — cron, Compose service, or platform job (once per UTC day)

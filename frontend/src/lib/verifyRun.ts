@@ -23,6 +23,11 @@ export type VerifyRunResult = {
   reason?: string | null;
   stored?: boolean;
   runId?: string | null;
+  dailyRank?: number | null;
+  dailyTotal?: number | null;
+  personalBestMs?: number | null;
+  previousPersonalBestMs?: number | null;
+  isPersonalBest?: boolean | null;
 };
 
 export async function verifyRun(

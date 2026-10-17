@@ -35,9 +35,14 @@ Repository: [github.com/NethmaDS123/Detonate](https://github.com/NethmaDS123/Det
 - On win, the UI sends your move log to the API when it is reachable and shows **verified** when the server agrees; verified wins are **stored in Postgres** when the database is up (tagged **random** or **daily** with a `dailyId` like `YYYY-MM-DD:difficulty`).
 - **Leaderboard** of the fastest verified times per difficulty (`GET /v1/leaderboard`), shown beside the board and on its own page. Your latest saved win is marked when it places.
 - **Daily leaderboard** — fastest verified clears on today’s shared board only (`GET /v1/daily/leaderboard`); shown on Daily play and on the Leaderboard page under **Today’s daily**.
+- **Daily rank on clear** — after a verified daily win, the result screen shows your place on that day’s board (`#n / total` from `POST /v1/runs/verify`).
+- **Personal bests** — signed-in players get fastest verified **classic** and **daily** times per difficulty (`GET /v1/accounts/me/bests`); new bests and current PBs show after a win and on the account page.
+- **Share result** — after a game, **Share** copies a score line plus a link; classic links include the seed (`/play?…&seed=`), daily links open today’s board (`/daily?…&from=share`).
+- **Share preview** — shared `/share/r?…` links expose Open Graph/Twitter cards (generated image with time, rank, mini grid) and a **Play this board** button.
 - **Daily board** — one shared seed per difficulty per UTC day (`GET /v1/daily`); the worker publishes seeds to Redis, with the same deterministic fallback when Redis is empty. Daily submissions must match that day's seed (today or yesterday, UTC) or they are rejected.
-- **Accounts** — create a display name, receive a bearer token, and attach verified wins to your name on the leaderboard (`POST /v1/accounts`, `GET /v1/accounts/me`).
-- **App pages** — home, **Daily** and **Classic** play screens with difficulty tabs, a full **Leaderboard** page, and an **Account** page for creating an account or signing in with a token; the header shows who is signed in.
+- **Daily branding** — `Daily #N` day index (epoch 2026-01-01 UTC), board size and mine count, and today’s best verified time on Daily play, leaderboard, and `GET /v1/daily`.
+- **Accounts** — **Clerk + Google** sign-in when configured (`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` + API `CLERK_ISSUER` / `CLERK_JWKS_URL`), with **`POST /v1/accounts/clerk/sync`** and **`POST /v1/accounts/clerk/link`** to migrate legacy bearer-token profiles; token-only accounts still work without Clerk.
+- **App pages** — home with **Play today’s board**, live daily stats when the API is up, **Daily** and **Classic** play screens with difficulty tabs, a full **Leaderboard** page, and an **Account** page for creating an account or signing in with a token; the header shows who is signed in.
 - Engine tests on both stacks; fixture export script to sync TS tests after Python rule changes.
 
 ### Build order

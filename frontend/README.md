@@ -24,7 +24,7 @@ pnpm dev
 
 Open http://localhost:3000
 
-With the API on port 8000, clearing a board triggers `POST /v1/runs/verify` and shows **verified** when the server replay matches. The page also loads `GET /v1/leaderboard`, optional **Daily** mode via `GET /v1/daily`, and **Accounts** (`POST /v1/accounts` / token in `localStorage` for named leaderboard entries). Override the API host with `NEXT_PUBLIC_API_URL` in `.env.local`.
+With the API on port 8000, clearing a board triggers `POST /v1/runs/verify` and shows **verified** when the server replay matches. The page also loads `GET /v1/leaderboard`, optional **Daily** mode via `GET /v1/daily`, and **Accounts** (`POST /v1/accounts` / token in `localStorage` for named leaderboard entries). Override the API host with `NEXT_PUBLIC_API_URL` in `.env.local`. Optional `NEXT_PUBLIC_SITE_URL` for canonical share/OG links (defaults to the current origin). Post-game **Share** uses `/share/r?…` for Open Graph/Twitter preview cards.
 
 ## Tests (engine port vs Python fixtures)
 

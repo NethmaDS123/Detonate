@@ -30,11 +30,13 @@ uv run --package detonate-api uvicorn detonate_api.main:app --reload --port 8000
 
 - Health: http://localhost:8000/health  
 - OpenAPI: http://localhost:8000/docs  
-- Verify a run: `POST /v1/runs/verify` (JSON body: `difficultyId`, `seed`, `events`, `status`, `durationMs`); verified wins are inserted into `runs` when Postgres is available (`RUNS_PERSIST=1`, default).
+- Verify a run: `POST /v1/runs/verify` (JSON body: `difficultyId`, `seed`, `events`, `status`, `durationMs`); verified wins are inserted into `runs` when Postgres is available (`RUNS_PERSIST=1`, default). Daily wins include `dailyRank` and `dailyTotal` for that board.
 - Leaderboard: `GET /v1/leaderboard?difficultyId=beginner&limit=10` — fastest stored wins for that difficulty.
 - Daily leaderboard: `GET /v1/daily/leaderboard?difficultyId=beginner&limit=10` — fastest verified clears for today’s daily board (UTC).
-- Daily board: `GET /v1/daily?difficultyId=beginner` — today’s shared seed (UTC). Publish to Redis with the worker (below).
+- Daily board: `GET /v1/daily?difficultyId=beginner` — today’s shared seed (UTC), `dailyNumber` (day index since 2026-01-01), grid stats, and `bestDurationMs` for that daily. Publish to Redis with the worker (below).
 - Accounts: `POST /v1/accounts` with `{ "displayName": "you" }` returns a one-time token; send `Authorization: Bearer <token>` on verify to name leaderboard entries.
+- Clerk: set `CLERK_ISSUER` and `CLERK_JWKS_URL` to accept Clerk session JWTs. `POST /v1/accounts/clerk/sync` registers a player; `POST /v1/accounts/clerk/link` attaches a Clerk user to an existing token account.
+- Personal bests: `GET /v1/accounts/me/bests` (auth required) — fastest verified classic and daily run per difficulty. Verify responses include `personalBestMs`, `previousPersonalBestMs`, and `isPersonalBest` when signed in.
 
 ## Daily worker
 

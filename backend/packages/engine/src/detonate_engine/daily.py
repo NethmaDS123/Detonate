@@ -5,6 +5,9 @@ from datetime import date, datetime, timedelta, timezone
 
 from detonate_engine.difficulties import DIFFICULTIES
 
+# Day 1 of Detonate dailies (UTC calendar days).
+DAILY_EPOCH = date(2026, 1, 1)
+
 
 def utc_today(now: datetime | None = None) -> date:
     instant = now or datetime.now(timezone.utc)
@@ -13,6 +16,10 @@ def utc_today(now: datetime | None = None) -> date:
 
 def daily_id(day: date, difficulty_id: str) -> str:
     return f"{day.isoformat()}:{difficulty_id}"
+
+
+def daily_number(day: date) -> int:
+    return (day - DAILY_EPOCH).days + 1
 
 
 def daily_seed(difficulty_id: str, day: date) -> int:

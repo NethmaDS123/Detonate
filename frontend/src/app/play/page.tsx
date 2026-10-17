@@ -2,28 +2,40 @@ import type { Metadata } from "next";
 import { DifficultyTabs } from "@/components/DifficultyTabs";
 import { GameClient } from "@/components/GameClient";
 import { PageHeader } from "@/components/PageHeader";
+import { SharedBoardNotice } from "@/components/SharedBoardNotice";
 import { resolveDifficulty } from "@/lib/difficulty";
-import { randomSeed } from "@/lib/seed";
+import { parseSeedParam, randomSeed } from "@/lib/seed";
+import { isSharedBoardLink } from "@/lib/shareParams";
 
 export const metadata: Metadata = { title: "Classic" };
 
 export default async function PlayPage({ searchParams }: PageProps<"/play">) {
-  const difficulty = resolveDifficulty((await searchParams).difficulty);
+  const params = await searchParams;
+  const difficulty = resolveDifficulty(params.difficulty);
+  const shared = isSharedBoardLink(params.from);
+  const seedFromLink = parseSeedParam(params.seed);
+  const initialSeed = seedFromLink ?? randomSeed();
+  const gameKey = `${difficulty.id}:${initialSeed}`;
 
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
         eyebrow="Classic"
-        title="Fresh board, every time"
-        description="A new random board each game. Verified wins count toward the all-time leaderboard."
+        title={shared && seedFromLink != null ? "Shared board" : "Fresh board, every time"}
+        description={
+          shared && seedFromLink != null
+            ? "This is the same seeded board from a shared link. Verified wins count toward the all-time leaderboard."
+            : "A new random board each game. Verified wins count toward the all-time leaderboard."
+        }
       >
         <DifficultyTabs basePath="/play" activeId={difficulty.id} />
       </PageHeader>
+      {shared && seedFromLink != null ? <SharedBoardNotice boardKind="random" /> : null}
       <GameClient
-        key={difficulty.id}
+        key={gameKey}
         boardKind="random"
         difficultyId={difficulty.id}
-        initialSeed={randomSeed()}
+        initialSeed={initialSeed}
       />
     </div>
   );

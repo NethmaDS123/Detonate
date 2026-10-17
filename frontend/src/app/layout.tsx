@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AccountProvider } from "@/components/AccountProvider";
 import { SiteHeader } from "@/components/SiteHeader";
+import { siteOriginFromEnv } from "@/lib/siteUrl";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -15,6 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(siteOriginFromEnv() ?? "http://localhost:3000"),
   title: { default: "Detonate — Don't.", template: "%s · Detonate" },
   description: "Competitive Minesweeper. Clear the board. Don't detonate.",
 };

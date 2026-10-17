@@ -3,6 +3,8 @@ import Link from "next/link";
 import { DifficultyTabs } from "@/components/DifficultyTabs";
 import { Leaderboard } from "@/components/Leaderboard";
 import { PageHeader } from "@/components/PageHeader";
+import { fetchDailyResult } from "@/lib/daily";
+import { formatDailyStatsLine } from "@/lib/dailyBranding";
 import { resolveDifficulty } from "@/lib/difficulty";
 
 export const metadata: Metadata = { title: "Leaderboard" };
@@ -17,15 +19,28 @@ export default async function LeaderboardPage({ searchParams }: PageProps<"/lead
   const difficulty = resolveDifficulty(params.difficulty);
   const scope = resolveBoard(params.board);
   const daily = scope === "daily";
+  let dailyNumber = 1;
+  let dailyDescription =
+    "Fastest verified clears on today's shared board only. Resets at midnight UTC.";
+  if (daily) {
+    try {
+      const info = await fetchDailyResult(difficulty.id);
+      dailyNumber = info.dailyNumber;
+      const board = info.boards.find((entry) => entry.difficultyId === difficulty.id);
+      dailyDescription = formatDailyStatsLine(difficulty, board?.bestDurationMs);
+    } catch {
+      dailyDescription = formatDailyStatsLine(difficulty, null);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
-        eyebrow="Leaderboard"
+        eyebrow={daily ? `Daily #${dailyNumber}` : "Leaderboard"}
         title={daily ? "Today's daily" : "Fastest verified clears"}
         description={
           daily
-            ? "Fastest verified clears on today's shared board only. Resets at midnight UTC."
+            ? dailyDescription
             : "Every time here was replayed move by move on the server before it was ranked."
         }
       >

@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { useAccount } from "@/components/AccountProvider";
+import { PersonalBestsPanel } from "@/components/PersonalBestsPanel";
 import { ApiError } from "@/lib/api";
+import { isClerkEnabled } from "@/lib/clerkEnabled";
 
 const NAME_PATTERN = /^[A-Za-z0-9_]{2,24}$/;
 
@@ -12,6 +14,7 @@ function describeError(error: unknown, action: "register" | "signIn"): string {
     if (error.status === 409) return "That name is taken. Try another.";
     if (error.status === 422) return "Use 2–24 letters, numbers, or underscores.";
     if (error.status === 401) return "That token doesn't match an account.";
+    if (error.status === 409) return "That account is already linked to another sign-in.";
     if (error.status === 503) return "Accounts are temporarily unavailable. Try again shortly.";
   }
   if (error instanceof TypeError) return "Can't reach the server. Check your connection.";
@@ -19,8 +22,9 @@ function describeError(error: unknown, action: "register" | "signIn"): string {
 }
 
 export function AccountView() {
-  const { status, account, token, retry, signOut } = useAccount();
+  const { status, account, token, authMode, retry, signOut } = useAccount();
   const [newToken, setNewToken] = useState<string | null>(null);
+  const clerkAuth = isClerkEnabled() && authMode === "clerk";
 
   if (status === "loading") {
     return (
@@ -72,7 +76,31 @@ export function AccountView() {
             </button>
           </div>
         </section>
-        {!newToken && <TokenPanel token={token} />}
+        <PersonalBestsPanel token={token} />
+        {clerkAuth ? <LegacyLinkForm /> : !newToken ? <TokenPanel token={token} /> : null}
+      </div>
+    );
+  }
+
+  if (clerkAuth) {
+    return (
+      <div className="mx-auto flex max-w-md flex-col gap-6">
+        <div>
+          <p className="eyebrow">Account</p>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight">Sign in to compete</h1>
+          <p className="mt-2 text-sm text-[var(--muted)]">
+            Use Google (via Clerk) to attach verified wins to your name. Already created a token
+            account? Link it after you sign in.
+          </p>
+        </div>
+        <section className="card flex flex-col gap-4 p-6">
+          <Link href="/sign-in" className="btn btn-primary text-center">
+            Continue with Google
+          </Link>
+          <p className="text-xs text-[var(--muted)]">
+            Configure Google OAuth in your Clerk dashboard for this environment.
+          </p>
+        </section>
       </div>
     );
   }
@@ -90,6 +118,56 @@ export function AccountView() {
       <RegisterForm onCreated={setNewToken} />
       <SignInForm />
     </div>
+  );
+}
+
+function LegacyLinkForm() {
+  const { signIn } = useAccount();
+  const [legacyToken, setLegacyToken] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!legacyToken.trim()) {
+      setError("Paste the token from your old account.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await signIn(legacyToken);
+    } catch (err) {
+      setError(describeError(err, "signIn"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="card flex flex-col gap-3 p-6" noValidate>
+      <div>
+        <h2 className="font-medium">Link a token account</h2>
+        <p className="mt-1 text-sm text-[var(--muted)]">
+          Moves your old bearer-token profile onto this Google sign-in.
+        </p>
+      </div>
+      <label className="flex flex-col gap-1.5 text-sm">
+        Legacy token
+        <input
+          className="input font-mono"
+          type="password"
+          value={legacyToken}
+          onChange={(e) => setLegacyToken(e.target.value)}
+          autoComplete="off"
+          spellCheck={false}
+        />
+      </label>
+      {error ? <p className="text-xs text-[var(--accent)]">{error}</p> : null}
+      <button type="submit" className="btn btn-sm" disabled={busy}>
+        {busy ? "Linking…" : "Link token account"}
+      </button>
+    </form>
   );
 }
 

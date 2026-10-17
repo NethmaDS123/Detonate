@@ -19,6 +19,14 @@ DATABASE_URL = os.getenv(
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 RUNS_PERSIST = os.getenv("RUNS_PERSIST", "1").strip().lower() not in ("0", "false", "no")
 
+CLERK_ISSUER = os.getenv("CLERK_ISSUER", "").strip().rstrip("/")
+CLERK_JWKS_URL = os.getenv("CLERK_JWKS_URL", "").strip()
+CLERK_AUDIENCE = os.getenv("CLERK_AUDIENCE", "").strip() or None
+
+
+def clerk_auth_enabled() -> bool:
+    return bool(CLERK_ISSUER and CLERK_JWKS_URL)
+
 _PLACEHOLDER_MARKERS = ("[password]", "[project-ref]", "[region]")
 
 
