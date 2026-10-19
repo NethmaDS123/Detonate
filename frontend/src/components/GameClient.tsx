@@ -16,6 +16,7 @@ import {
   type VerifyRunPayload,
   type VerifyRunResult,
 } from "@/lib/verifyRun";
+import { IN_GAME_RANKED_HINT } from "@/lib/rankedPlay";
 
 type VerifyState =
   | { kind: "idle" }
@@ -45,7 +46,10 @@ function verifySummary(
   boardKind: BoardKind,
 ): { tone: Tone; text: string } {
   if (state.kind === "unavailable") {
-    return { tone: "muted", text: "Couldn't reach the server, so this win wasn't recorded." };
+    return {
+      tone: "muted",
+      text: "Casual win — the server was unreachable, so this clear wasn't verified or ranked.",
+    };
   }
   if (state.kind !== "done") {
     return { tone: "muted", text: "Verifying with the server…" };
@@ -70,7 +74,10 @@ function verifySummary(
   if (result.reason === "daily_mismatch") {
     return { tone: "bad", text: "This daily board has expired. Load today's board to rank." };
   }
-  return { tone: "bad", text: "The server replay didn't match this result, so it wasn't ranked." };
+  return {
+    tone: "bad",
+    text: "Server replay didn't match — casual clear only, not ranked.",
+  };
 }
 
 function personalBestCopy(
@@ -374,11 +381,14 @@ export function GameClient({
               }
             />
           ) : (
-            <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-[var(--muted)]">
-              <span>Left-click reveals · right-click flags · click a number to chord</span>
-              <button type="button" className="btn btn-sm" onClick={newBoard}>
-                {boardKind === "daily" ? "Restart" : "New board"}
-              </button>
+            <div className="flex flex-col gap-2 text-xs text-[var(--muted)]">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span>Left-click reveals · right-click flags · click a number to chord</span>
+                <button type="button" className="btn btn-sm" onClick={newBoard}>
+                  {boardKind === "daily" ? "Restart" : "New board"}
+                </button>
+              </div>
+              <p>{IN_GAME_RANKED_HINT}</p>
             </div>
           )}
         </div>

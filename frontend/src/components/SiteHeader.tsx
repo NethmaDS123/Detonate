@@ -37,6 +37,8 @@ export function SiteHeader() {
 
         {status === "loading" ? (
           <span className="h-8 w-20 animate-pulse rounded-md bg-[var(--line)]" aria-hidden />
+        ) : status === "needs_profile" || status === "needs_onboarding" ? (
+          <span className="text-xs text-[var(--muted)]">Finish setup</span>
         ) : status === "signed_in" && account ? (
           <Link
             href="/account"

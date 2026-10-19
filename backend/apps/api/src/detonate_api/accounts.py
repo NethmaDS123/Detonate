@@ -19,7 +19,7 @@ def create_player(database_url: str, display_name: str) -> tuple[Player, str]:
                 """
                 INSERT INTO players (display_name, token_hash)
                 VALUES (%s, %s)
-                RETURNING id::text, display_name
+                RETURNING id::text, display_name, onboarding_completed_at
                 """,
                 (display_name, token_hash),
             )
@@ -30,7 +30,7 @@ def create_player(database_url: str, display_name: str) -> tuple[Player, str]:
         if row is None:
             raise RuntimeError("insert did not return player")
         conn.commit()
-    return Player(id=row[0], display_name=row[1]), token
+    return Player(id=row[0], display_name=row[1], onboarding_completed_at=row[2]), token
 
 
 class ClerkUserAlreadyLinkedError(Exception):
@@ -45,7 +45,7 @@ def lookup_player_by_clerk_user_id(database_url: str, clerk_user_id: str) -> Pla
     with psycopg.connect(database_url, connect_timeout=5) as conn, conn.cursor() as cur:
         cur.execute(
             """
-            SELECT id::text, display_name
+            SELECT id::text, display_name, onboarding_completed_at
             FROM players
             WHERE clerk_user_id = %s
             """,
@@ -54,7 +54,7 @@ def lookup_player_by_clerk_user_id(database_url: str, clerk_user_id: str) -> Pla
         row = cur.fetchone()
     if row is None:
         return None
-    return Player(id=row[0], display_name=row[1])
+    return Player(id=row[0], display_name=row[1], onboarding_completed_at=row[2])
 
 
 def upsert_player_for_clerk(
@@ -63,7 +63,7 @@ def upsert_player_for_clerk(
     with psycopg.connect(database_url, connect_timeout=5) as conn, conn.cursor() as cur:
         cur.execute(
             """
-            SELECT id::text, display_name
+            SELECT id::text, display_name, onboarding_completed_at
             FROM players
             WHERE clerk_user_id = %s
             """,
@@ -71,14 +71,14 @@ def upsert_player_for_clerk(
         )
         existing = cur.fetchone()
         if existing is not None:
-            return Player(id=existing[0], display_name=existing[1])
+            return Player(id=existing[0], display_name=existing[1], onboarding_completed_at=existing[2])
 
         try:
             cur.execute(
                 """
                 INSERT INTO players (display_name, clerk_user_id, token_hash)
                 VALUES (%s, %s, NULL)
-                RETURNING id::text, display_name
+                RETURNING id::text, display_name, onboarding_completed_at
                 """,
                 (display_name, clerk_user_id),
             )
@@ -89,7 +89,47 @@ def upsert_player_for_clerk(
         if row is None:
             raise RuntimeError("insert did not return player")
         conn.commit()
-    return Player(id=row[0], display_name=row[1])
+    return Player(id=row[0], display_name=row[1], onboarding_completed_at=row[2])
+
+
+def update_player_display_name(database_url: str, player_id: str, display_name: str) -> Player:
+    with psycopg.connect(database_url, connect_timeout=5) as conn, conn.cursor() as cur:
+        try:
+            cur.execute(
+                """
+                UPDATE players
+                SET display_name = %s
+                WHERE id = %s::uuid
+                RETURNING id::text, display_name, onboarding_completed_at
+                """,
+                (display_name, player_id),
+            )
+        except psycopg.errors.UniqueViolation as exc:
+            conn.rollback()
+            raise DisplayNameTakenError from exc
+        row = cur.fetchone()
+        if row is None:
+            raise RuntimeError("player not found")
+        conn.commit()
+    return Player(id=row[0], display_name=row[1], onboarding_completed_at=row[2])
+
+
+def complete_player_onboarding(database_url: str, player_id: str) -> Player:
+    with psycopg.connect(database_url, connect_timeout=5) as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE players
+            SET onboarding_completed_at = COALESCE(onboarding_completed_at, NOW())
+            WHERE id = %s::uuid
+            RETURNING id::text, display_name, onboarding_completed_at
+            """,
+            (player_id,),
+        )
+        row = cur.fetchone()
+        if row is None:
+            raise RuntimeError("player not found")
+        conn.commit()
+    return Player(id=row[0], display_name=row[1], onboarding_completed_at=row[2])
 
 
 def link_clerk_to_legacy_player(
@@ -116,14 +156,17 @@ def link_clerk_to_legacy_player(
             UPDATE players
             SET clerk_user_id = %s
             WHERE id = %s::uuid AND clerk_user_id IS NULL
-            RETURNING id::text, display_name
+            RETURNING id::text, display_name, onboarding_completed_at
             """,
             (clerk_user_id, legacy_player.id),
         )
         row = cur.fetchone()
         if row is None:
             cur.execute(
-                "SELECT id::text, display_name FROM players WHERE id = %s::uuid",
+                """
+                SELECT id::text, display_name, onboarding_completed_at
+                FROM players WHERE id = %s::uuid
+                """,
                 (legacy_player.id,),
             )
             row = cur.fetchone()
@@ -131,8 +174,7 @@ def link_clerk_to_legacy_player(
                 raise LegacyTokenInvalidError
             if row[0] != legacy_player.id:
                 raise RuntimeError("unexpected player row")
-            # Already linked to this clerk user.
             conn.commit()
-            return Player(id=row[0], display_name=row[1])
+            return Player(id=row[0], display_name=row[1], onboarding_completed_at=row[2])
         conn.commit()
-    return Player(id=row[0], display_name=row[1])
+    return Player(id=row[0], display_name=row[1], onboarding_completed_at=row[2])

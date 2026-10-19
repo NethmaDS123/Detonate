@@ -16,7 +16,11 @@ def publish_daily_boards(redis_url: str) -> str:
     return day.isoformat()
 
 
-def main() -> None:
+def run_once() -> None:
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
     day = publish_daily_boards(redis_url)
     print(f"Published daily boards for {day}.")
+
+
+def main() -> None:
+    run_once()

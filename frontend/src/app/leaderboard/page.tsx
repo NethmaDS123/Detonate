@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { fetchDailyResult } from "@/lib/daily";
 import { formatDailyStatsLine } from "@/lib/dailyBranding";
 import { resolveDifficulty } from "@/lib/difficulty";
+import { leaderboardSubtitle } from "@/lib/rankedPlay";
 
 export const metadata: Metadata = { title: "Leaderboard" };
 
@@ -20,16 +21,15 @@ export default async function LeaderboardPage({ searchParams }: PageProps<"/lead
   const scope = resolveBoard(params.board);
   const daily = scope === "daily";
   let dailyNumber = 1;
-  let dailyDescription =
-    "Fastest verified clears on today's shared board only. Resets at midnight UTC.";
+  let dailyDescription = leaderboardSubtitle("daily");
   if (daily) {
     try {
       const info = await fetchDailyResult(difficulty.id);
       dailyNumber = info.dailyNumber;
       const board = info.boards.find((entry) => entry.difficultyId === difficulty.id);
-      dailyDescription = formatDailyStatsLine(difficulty, board?.bestDurationMs);
+      dailyDescription = `${formatDailyStatsLine(difficulty, board?.bestDurationMs)} ${leaderboardSubtitle("daily")}`;
     } catch {
-      dailyDescription = formatDailyStatsLine(difficulty, null);
+      dailyDescription = `${formatDailyStatsLine(difficulty, null)} ${leaderboardSubtitle("daily")}`;
     }
   }
 
@@ -38,11 +38,7 @@ export default async function LeaderboardPage({ searchParams }: PageProps<"/lead
       <PageHeader
         eyebrow={daily ? `Daily #${dailyNumber}` : "Leaderboard"}
         title={daily ? "Today's daily" : "Fastest verified clears"}
-        description={
-          daily
-            ? dailyDescription
-            : "Every time here was replayed move by move on the server before it was ranked."
-        }
+        description={daily ? dailyDescription : leaderboardSubtitle("all")}
       >
         <div className="flex flex-col gap-3">
           <nav aria-label="Leaderboard type" className="segmented w-fit">

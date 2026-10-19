@@ -1,4 +1,4 @@
-from detonate_worker.daily import main
+from detonate_worker.cli import main
 
 __all__ = ["main"]
 

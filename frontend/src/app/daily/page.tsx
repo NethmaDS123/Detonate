@@ -7,6 +7,7 @@ import { formatDailyStatsLine } from "@/lib/dailyBranding";
 import { SharedBoardNotice } from "@/components/SharedBoardNotice";
 import { resolveDifficulty } from "@/lib/difficulty";
 import { isSharedBoardLink } from "@/lib/shareParams";
+import { DAILY_PAGE_BLURB } from "@/lib/rankedPlay";
 
 export const metadata: Metadata = { title: "Daily" };
 
@@ -15,15 +16,14 @@ export default async function DailyPage({ searchParams }: PageProps<"/daily">) {
   const difficulty = resolveDifficulty(params.difficulty);
   const shared = isSharedBoardLink(params.from);
   let dailyNumber = 1;
-  let description =
-    "Everyone gets the same board for each difficulty. It changes at midnight UTC.";
+  let description = DAILY_PAGE_BLURB;
   try {
     const daily = await fetchDailyResult(difficulty.id);
     dailyNumber = daily.dailyNumber;
     const board = daily.boards.find((entry) => entry.difficultyId === difficulty.id);
-    description = formatDailyStatsLine(difficulty, board?.bestDurationMs);
+    description = `${formatDailyStatsLine(difficulty, board?.bestDurationMs)} ${DAILY_PAGE_BLURB}`;
   } catch {
-    description = formatDailyStatsLine(difficulty, null);
+    description = `${formatDailyStatsLine(difficulty, null)} ${DAILY_PAGE_BLURB}`;
   }
 
   return (

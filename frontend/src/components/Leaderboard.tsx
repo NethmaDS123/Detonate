@@ -10,6 +10,8 @@ import {
   type DailyLeaderboardResult,
   type LeaderboardEntry,
 } from "@/lib/leaderboard";
+import { LEADERBOARD_FOOTER, leaderboardSubtitle } from "@/lib/rankedPlay";
+import { VerifiedOnlyBadge } from "@/components/VerifiedOnlyBadge";
 
 export function Leaderboard({
   difficultyId,
@@ -88,11 +90,15 @@ export function Leaderboard({
   return (
     <section className="card overflow-hidden">
       <header className="flex flex-col gap-1 border-b border-[var(--line)] px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between">
-        <div>
-          <h2 className="text-sm font-medium">
-            {daily && dailyNumber != null ? `Daily #${dailyNumber}` : daily ? "Today's daily" : "Fastest times"}{" "}
-            <span className="text-[var(--muted)]">· {label}</span>
-          </h2>
+        <div className="space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-sm font-medium">
+              {daily && dailyNumber != null ? `Daily #${dailyNumber}` : daily ? "Today's daily" : "Fastest times"}{" "}
+              <span className="text-[var(--muted)]">· {label}</span>
+            </h2>
+            <VerifiedOnlyBadge />
+          </div>
+          <p className="text-xs text-[var(--muted)]">{leaderboardSubtitle(scope)}</p>
           {daily && difficulty ? (
             <p className="text-xs text-[var(--muted)]">
               {difficulty.width}×{difficulty.height} · {difficulty.mines} mines
@@ -173,6 +179,12 @@ export function Leaderboard({
       {state === "ready" && entries.length > 0 && highlightRunId && !highlighted && (
         <p className="border-t border-[var(--line)] px-4 py-2 text-xs text-[var(--muted)]">
           Your time is outside the top {limit}.
+        </p>
+      )}
+
+      {state === "ready" && (
+        <p className="border-t border-[var(--line)] px-4 py-2 text-xs text-[var(--muted)]">
+          {LEADERBOARD_FOOTER}
         </p>
       )}
     </section>

@@ -5,7 +5,15 @@ const TOKEN_KEY = "detonate_account_token";
 export type Account = {
   playerId: string;
   displayName: string;
+  onboardingCompleted: boolean;
 };
+
+export class NoProfileError extends Error {
+  constructor() {
+    super("no_profile");
+    this.name = "NoProfileError";
+  }
+}
 
 export type CreateAccountResult = Account & { token: string };
 
@@ -47,8 +55,33 @@ function authHeaders(token: string | null): HeadersInit {
 
 export async function fetchAccount(token: string): Promise<Account> {
   const res = await fetch(`${apiBase()}/v1/accounts/me`, { headers: authHeaders(token) });
+  if (res.status === 404) {
+    const body = (await res.json().catch(() => null)) as { detail?: string } | null;
+    if (body?.detail === "no_profile") throw new NoProfileError();
+  }
   if (!res.ok) {
     throw new ApiError(res.status, `account failed (${res.status})`);
+  }
+  return res.json() as Promise<Account>;
+}
+
+export async function updateAccount(
+  token: string,
+  patch: { displayName?: string; completeOnboarding?: boolean },
+): Promise<Account> {
+  const res = await fetch(`${apiBase()}/v1/accounts/me`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      ...(patch.displayName ? { displayName: patch.displayName } : {}),
+      ...(patch.completeOnboarding ? { completeOnboarding: true } : {}),
+    }),
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, `update account failed (${res.status})`);
   }
   return res.json() as Promise<Account>;
 }

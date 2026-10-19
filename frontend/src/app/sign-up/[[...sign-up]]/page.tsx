@@ -1,8 +1,12 @@
-import { SignUp } from "@clerk/nextjs";
+import { redirect } from "next/navigation";
 import Link from "next/link";
-import { isClerkEnabled } from "@/lib/clerkEnabled";
+import { isClerkEnabled, isClerkOnlyAuth } from "@/lib/clerkEnabled";
 
 export default function SignUpPage() {
+  if (isClerkEnabled() && isClerkOnlyAuth()) {
+    redirect("/sign-in");
+  }
+
   if (!isClerkEnabled()) {
     return (
       <div className="mx-auto max-w-md text-center">
@@ -14,9 +18,5 @@ export default function SignUpPage() {
     );
   }
 
-  return (
-    <div className="mx-auto flex max-w-md justify-center">
-      <SignUp routing="path" path="/sign-up" signInUrl="/sign-in" />
-    </div>
-  );
+  redirect("/sign-in");
 }

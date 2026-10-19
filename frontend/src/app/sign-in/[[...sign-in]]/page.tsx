@@ -1,6 +1,6 @@
 import { SignIn } from "@clerk/nextjs";
-import { isClerkEnabled } from "@/lib/clerkEnabled";
 import Link from "next/link";
+import { isClerkEnabled } from "@/lib/clerkEnabled";
 
 export default function SignInPage() {
   if (!isClerkEnabled()) {
@@ -15,8 +15,14 @@ export default function SignInPage() {
   }
 
   return (
-    <div className="mx-auto flex max-w-md justify-center">
-      <SignIn routing="path" path="/sign-in" signUpUrl="/sign-up" />
+    <div className="mx-auto flex max-w-md flex-col gap-4">
+      <div className="text-center">
+        <h1 className="text-xl font-semibold">Sign in</h1>
+        <p className="mt-1 text-sm text-[var(--muted)]">
+          Google only. New players choose a username and take a short tour after their first sign-in.
+        </p>
+      </div>
+      <SignIn routing="path" path="/sign-in" forceRedirectUrl="/" />
     </div>
   );
 }

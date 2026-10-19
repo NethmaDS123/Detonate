@@ -46,5 +46,7 @@ After backend engine changes, re-export fixtures from the **backend** repo folde
 
 ## Deploy (typical)
 
-- Build: `pnpm build` then `pnpm start`, or platform default for Next.js
-- Env: `NEXT_PUBLIC_API_URL=https://api.yourdomain.com` when the API is live
+Full checklist and Docker: **[`../docs/DEPLOY.md`](../docs/DEPLOY.md)**
+
+- Vercel: root `frontend`, set `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_SITE_URL` at build time
+- Docker: `docker build -f Dockerfile -t detonate-web .` with build-args for `NEXT_PUBLIC_*`

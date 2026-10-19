@@ -133,6 +133,16 @@ class AccountResponse(BaseModel):
 
     player_id: str = Field(alias="playerId")
     display_name: str = Field(alias="displayName")
+    onboarding_completed: bool = Field(alias="onboardingCompleted")
+
+
+class UpdateAccountRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    display_name: str | None = Field(
+        default=None, alias="displayName", min_length=2, max_length=24, pattern=DISPLAY_NAME_PATTERN
+    )
+    complete_onboarding: bool | None = Field(default=None, alias="completeOnboarding")
 
 
 class PersonalBestEntry(BaseModel):

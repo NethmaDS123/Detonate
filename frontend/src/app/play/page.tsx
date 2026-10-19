@@ -6,6 +6,7 @@ import { SharedBoardNotice } from "@/components/SharedBoardNotice";
 import { resolveDifficulty } from "@/lib/difficulty";
 import { parseSeedParam, randomSeed } from "@/lib/seed";
 import { isSharedBoardLink } from "@/lib/shareParams";
+import { CLASSIC_PAGE_BLURB } from "@/lib/rankedPlay";
 
 export const metadata: Metadata = { title: "Classic" };
 
@@ -24,8 +25,8 @@ export default async function PlayPage({ searchParams }: PageProps<"/play">) {
         title={shared && seedFromLink != null ? "Shared board" : "Fresh board, every time"}
         description={
           shared && seedFromLink != null
-            ? "This is the same seeded board from a shared link. Verified wins count toward the all-time leaderboard."
-            : "A new random board each game. Verified wins count toward the all-time leaderboard."
+            ? `Shared seed from a link. ${CLASSIC_PAGE_BLURB}`
+            : CLASSIC_PAGE_BLURB
         }
       >
         <DifficultyTabs basePath="/play" activeId={difficulty.id} />

@@ -4,10 +4,9 @@ from typing import Annotated
 
 from fastapi import Header, HTTPException
 
-from detonate_api.accounts import lookup_player_by_clerk_user_id, upsert_player_for_clerk
+from detonate_api.accounts import lookup_player_by_clerk_user_id
 from detonate_api.clerk_auth import (
     ClerkTokenError,
-    display_name_from_clerk_claims,
     is_probable_clerk_jwt,
     verify_clerk_session_token,
 )
@@ -20,12 +19,13 @@ __all__ = [
     "hash_token",
     "new_token",
     "optional_player",
+    "parse_bearer",
     "require_clerk_claims",
     "require_player",
 ]
 
 
-def parse_bearer(authorization: Annotated[str | None, Header()] = None) -> str | None:
+def parse_bearer(authorization: str | None) -> str | None:
     if not authorization or not authorization.startswith("Bearer "):
         return None
     value = authorization.removeprefix("Bearer ").strip()
@@ -40,14 +40,7 @@ def _player_from_clerk_bearer(bearer: str) -> Player | None:
     except ClerkTokenError:
         return None
     clerk_user_id = str(claims["sub"])
-    existing = lookup_player_by_clerk_user_id(DATABASE_URL, clerk_user_id)
-    if existing is not None:
-        return existing
-    display_name = display_name_from_clerk_claims(claims)
-    try:
-        return upsert_player_for_clerk(DATABASE_URL, clerk_user_id, display_name)
-    except Exception:
-        return None
+    return lookup_player_by_clerk_user_id(DATABASE_URL, clerk_user_id)
 
 
 def resolve_player_from_bearer(bearer: str) -> Player | None:

@@ -10,10 +10,20 @@ import {
 import {
   fetchAccount,
   linkLegacyAccount,
+  NoProfileError,
   syncClerkAccount,
+  updateAccount,
   type Account,
 } from "@/lib/account";
 import { ApiError } from "@/lib/api";
+
+function resolveStatus(account: Account | null, offline: boolean, signedIn: boolean): AccountStatus {
+  if (!signedIn) return "guest";
+  if (offline) return "offline";
+  if (account === null) return "needs_profile";
+  if (!account.onboardingCompleted) return "needs_onboarding";
+  return "signed_in";
+}
 
 export function ClerkAccountProvider({ children }: { children: ReactNode }) {
   const { isLoaded, isSignedIn, getToken } = useAuth();
@@ -23,6 +33,23 @@ export function ClerkAccountProvider({ children }: { children: ReactNode }) {
   const [account, setAccount] = useState<Account | null>(null);
   const [offline, setOffline] = useState(false);
   const [attempt, setAttempt] = useState(0);
+
+  const loadProfile = useCallback(async (token: string) => {
+    try {
+      const me = await fetchAccount(token);
+      setAccount(me);
+      setOffline(false);
+      return me;
+    } catch (err) {
+      if (err instanceof NoProfileError) {
+        setAccount(null);
+        setOffline(false);
+        return null;
+      }
+      setOffline(true);
+      throw err;
+    }
+  }, []);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -39,12 +66,7 @@ export function ClerkAccountProvider({ children }: { children: ReactNode }) {
       if (!token || cancelled) return;
       setSessionToken(token);
       try {
-        await syncClerkAccount(token);
-        const me = await fetchAccount(token);
-        if (!cancelled) {
-          setAccount(me);
-          setOffline(false);
-        }
+        await loadProfile(token);
       } catch {
         if (!cancelled) setOffline(true);
       }
@@ -53,7 +75,7 @@ export function ClerkAccountProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [isLoaded, isSignedIn, getToken, user?.id, attempt]);
+  }, [isLoaded, isSignedIn, getToken, user?.id, attempt, loadProfile]);
 
   const openClerkSignIn = useCallback(async () => {
     await clerk.openSignIn({});
@@ -68,14 +90,12 @@ export function ClerkAccountProvider({ children }: { children: ReactNode }) {
           throw new ApiError(401, "Sign in with Google first, then link your token.");
         }
         await linkLegacyAccount(clerkToken, legacyToken);
-        const me = await fetchAccount(clerkToken);
-        setAccount(me);
-        setOffline(false);
+        await loadProfile(clerkToken);
         return;
       }
       await openClerkSignIn();
     },
-    [getToken, openClerkSignIn],
+    [getToken, loadProfile, openClerkSignIn],
   );
 
   const register = useCallback(
@@ -83,13 +103,20 @@ export function ClerkAccountProvider({ children }: { children: ReactNode }) {
       const token = await getToken();
       if (!token) throw new ApiError(401, "not signed in");
       await syncClerkAccount(token, displayName.trim());
-      const me = await fetchAccount(token);
-      setAccount(me);
+      const me = await loadProfile(token);
       setSessionToken(token);
       return token;
     },
-    [getToken],
+    [getToken, loadProfile],
   );
+
+  const completeOnboarding = useCallback(async () => {
+    const token = await getToken();
+    if (!token) throw new ApiError(401, "not signed in");
+    const me = await updateAccount(token, { completeOnboarding: true });
+    setAccount(me);
+    setSessionToken(token);
+  }, [getToken]);
 
   const signOut = useCallback(() => {
     void clerk.signOut();
@@ -104,10 +131,7 @@ export function ClerkAccountProvider({ children }: { children: ReactNode }) {
 
   let status: AccountStatus = "loading";
   if (isLoaded) {
-    if (!isSignedIn) status = "guest";
-    else if (offline) status = "offline";
-    else if (account) status = "signed_in";
-    else status = "loading";
+    status = resolveStatus(account, offline, Boolean(isSignedIn));
   }
 
   const value = useMemo<AccountContextValue>(
@@ -118,10 +142,11 @@ export function ClerkAccountProvider({ children }: { children: ReactNode }) {
       authMode: "clerk",
       signIn,
       register,
+      completeOnboarding,
       signOut,
       retry,
     }),
-    [status, account, sessionToken, signIn, register, signOut, retry],
+    [status, account, sessionToken, signIn, register, completeOnboarding, signOut, retry],
   );
 
   return <AccountContext.Provider value={value}>{children}</AccountContext.Provider>;

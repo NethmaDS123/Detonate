@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AccountProvider } from "@/components/AccountProvider";
+import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { SiteHeader } from "@/components/SiteHeader";
 import { siteOriginFromEnv } from "@/lib/siteUrl";
 import "./globals.css";
@@ -30,6 +31,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <AccountProvider>
           <SiteHeader />
+          <OnboardingFlow />
           <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 sm:py-10">
             {children}
           </main>

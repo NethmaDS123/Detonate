@@ -21,6 +21,7 @@ import {
   loadAccountToken,
   saveAccountToken,
   subscribeAccountToken,
+  updateAccount,
   type Account,
 } from "@/lib/account";
 import { ApiError } from "@/lib/api";
@@ -69,7 +70,11 @@ export function LegacyAccountProvider({ children }: { children: ReactNode }) {
     knownToken.current = result.token;
     setLookup({
       token: result.token,
-      account: { playerId: result.playerId, displayName: result.displayName },
+      account: {
+        playerId: result.playerId,
+        displayName: result.displayName,
+        onboardingCompleted: false,
+      },
     });
     saveAccountToken(result.token);
     return result.token;
@@ -81,6 +86,14 @@ export function LegacyAccountProvider({ children }: { children: ReactNode }) {
     clearAccountToken();
   }, []);
 
+  const completeOnboarding = useCallback(async () => {
+    const active = knownToken.current ?? token;
+    if (!active) throw new ApiError(401, "not signed in");
+    const me = await updateAccount(active, { completeOnboarding: true });
+    knownToken.current = active;
+    setLookup({ token: active, account: me });
+  }, [token]);
+
   const retry = useCallback(() => {
     setLookup(null);
     setAttempt((n) => n + 1);
@@ -91,7 +104,9 @@ export function LegacyAccountProvider({ children }: { children: ReactNode }) {
   if (token === undefined) status = "loading";
   else if (token === null) status = "guest";
   else if (!current) status = "loading";
-  else status = current.account ? "signed_in" : "offline";
+  else if (!current.account) status = "offline";
+  else if (!current.account.onboardingCompleted) status = "needs_onboarding";
+  else status = "signed_in";
 
   const account = current?.account ?? null;
   const value = useMemo<AccountContextValue>(
@@ -102,10 +117,11 @@ export function LegacyAccountProvider({ children }: { children: ReactNode }) {
       authMode: "legacy",
       signIn,
       register,
+      completeOnboarding,
       signOut,
       retry,
     }),
-    [status, account, token, signIn, register, signOut, retry],
+    [status, account, token, signIn, register, completeOnboarding, signOut, retry],
   );
 
   return <AccountContext.Provider value={value}>{children}</AccountContext.Provider>;

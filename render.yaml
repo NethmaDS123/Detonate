@@ -1,0 +1,23 @@
+# Optional Render Blueprint — adjust env vars in the dashboard after connect.
+services:
+  - type: web
+    name: detonate-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
+    envVars:
+      - key: RUNS_PERSIST
+        value: "1"
+      - key: RATE_LIMIT_USE_REDIS
+        value: "1"
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: API_CORS_ORIGINS
+        sync: false
+      - key: CLERK_ISSUER
+        sync: false
+      - key: CLERK_JWKS_URL
+        sync: false

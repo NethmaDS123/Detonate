@@ -1,6 +1,6 @@
 # Detonate build order
 
-**How to use:** Say **build next** to implement the **first unchecked** item below. When an item ships, mark it `[x]` and update root `README.md` **Shipped** if it is player-facing.
+**How to use:** Implement the **first unchecked** item below. When an item ships, mark it `[x]` and update root `README.md` **Shipped** if it is player-facing.
 
 Goal: competitive social Minesweeper platform (daily loop → social → ranked → replays/coach → UGC/modes/cosmetics), plus Clerk, scale, and themes.
 
@@ -31,11 +31,11 @@ Goal: competitive social Minesweeper platform (daily loop → social → ranked 
 - [x] **15.** Shareable result — post-game **Share** (copy text + link); recipient opens same board/challenge context
 - [x] **16.** Share preview — OG/meta or generated image card (time, rank, mini grid) for X/Discord/WhatsApp
 - [x] **17.** Clerk + Google sign-in — replace bare-token UX; map Clerk user → player; migration path from token accounts
-- [ ] **18.** Production deploy — API + frontend Dockerfiles or PaaS docs; env checklist; live demo URL in README when real
-- [ ] **19.** CI — GitHub Actions: Python engine + API tests (Postgres service), frontend engine tests
-- [ ] **20.** Scheduled daily worker — cron, Compose service, or platform job (once per UTC day)
-- [ ] **21.** Rate limits — verify, account create, leaderboard (abuse / viral protection)
-- [ ] **22.** Casual vs verified UX — label which leaderboards require verified runs only (already server-side; clarify in UI)
+- [x] **18.** Production deploy — API + frontend Dockerfiles or PaaS docs; env checklist; live demo URL in README when real
+- [x] **19.** CI — GitHub Actions: Python engine + API tests (Postgres service), frontend engine tests
+- [x] **20.** Scheduled daily worker — cron, Compose service, or platform job (once per UTC day)
+- [x] **21.** Rate limits — verify, account create, leaderboard (abuse / viral protection)
+- [x] **22.** Casual vs verified UX — label which leaderboards require verified runs only (already server-side; clarify in UI)
 
 ---
 

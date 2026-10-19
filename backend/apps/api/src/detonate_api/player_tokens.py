@@ -22,7 +22,7 @@ def lookup_player_by_token(token: str) -> Player | None:
     with psycopg.connect(DATABASE_URL, connect_timeout=5) as conn, conn.cursor() as cur:
         cur.execute(
             """
-            SELECT id::text, display_name
+            SELECT id::text, display_name, onboarding_completed_at
             FROM players
             WHERE token_hash = %s
             """,
@@ -31,4 +31,4 @@ def lookup_player_by_token(token: str) -> Player | None:
         row = cur.fetchone()
     if row is None:
         return None
-    return Player(id=row[0], display_name=row[1])
+    return Player(id=row[0], display_name=row[1], onboarding_completed_at=row[2])

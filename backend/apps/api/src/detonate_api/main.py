@@ -5,20 +5,24 @@ from datetime import date
 from typing import Annotated
 
 import psycopg
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from detonate_api.accounts import (
     ClerkUserAlreadyLinkedError,
     DisplayNameTakenError,
     LegacyTokenInvalidError,
+    complete_player_onboarding,
     create_player,
     link_clerk_to_legacy_player,
     lookup_player_by_clerk_user_id,
+    update_player_display_name,
     upsert_player_for_clerk,
 )
-from detonate_api.auth import optional_player, require_clerk_claims, require_player
-from detonate_api.clerk_auth import display_name_from_clerk_claims
+from detonate_api.auth import optional_player, parse_bearer, require_clerk_claims, require_player
+from detonate_api.clerk_auth import ClerkTokenError, is_probable_clerk_jwt, verify_clerk_session_token
+from detonate_api.player_tokens import lookup_player_by_token
+from detonate_api.types_player import Player
 from detonate_api.daily import resolve_daily_boards
 from detonate_api.db import (
     best_daily_duration_ms,
@@ -27,6 +31,7 @@ from detonate_api.db import (
     list_leaderboard,
     list_player_personal_bests,
 )
+from detonate_api.rate_limit import rate_limit_dependency
 from detonate_api.runs import verify_run
 from detonate_api.schemas import (
     AccountResponse,
@@ -41,6 +46,7 @@ from detonate_api.schemas import (
     ClerkSyncRequest,
     PersonalBestEntry,
     PersonalBestsResponse,
+    UpdateAccountRequest,
     VerifyRunRequest,
     VerifyRunResponse,
 )
@@ -83,6 +89,14 @@ app.add_middleware(
 )
 
 
+def _account_response(player: Player) -> AccountResponse:
+    return AccountResponse(
+        player_id=player.id,
+        display_name=player.display_name,
+        onboarding_completed=player.onboarding_completed,
+    )
+
+
 @app.get("/")
 def root() -> dict:
     return {"name": "Detonate", "slogan": "Don't."}
@@ -105,13 +119,17 @@ def ready() -> dict:
 @app.post("/v1/runs/verify", response_model=VerifyRunResponse)
 def runs_verify(
     body: VerifyRunRequest,
+    _rate_limit: None = Depends(rate_limit_dependency("verify")),
     player=Depends(optional_player),  # noqa: ANN001
 ) -> VerifyRunResponse:
     return verify_run(body, player)
 
 
 @app.post("/v1/accounts", response_model=CreateAccountResponse, status_code=201)
-def accounts_create(body: CreateAccountRequest) -> CreateAccountResponse:
+def accounts_create(
+    body: CreateAccountRequest,
+    _rate_limit: None = Depends(rate_limit_dependency("accounts")),
+) -> CreateAccountResponse:
     try:
         player, token = create_player(DATABASE_URL, body.display_name)
     except DisplayNameTakenError as exc:
@@ -126,8 +144,43 @@ def accounts_create(body: CreateAccountRequest) -> CreateAccountResponse:
 
 
 @app.get("/v1/accounts/me", response_model=AccountResponse)
-def accounts_me(player=Depends(require_player)) -> AccountResponse:  # noqa: ANN001
-    return AccountResponse(player_id=player.id, display_name=player.display_name)
+def accounts_me(authorization: Annotated[str | None, Header()] = None) -> AccountResponse:
+    bearer = parse_bearer(authorization)
+    if bearer is None:
+        raise HTTPException(status_code=401, detail="missing_token")
+    if clerk_auth_enabled() and is_probable_clerk_jwt(bearer):
+        try:
+            claims = verify_clerk_session_token(bearer)
+        except ClerkTokenError as exc:
+            raise HTTPException(status_code=401, detail="invalid_clerk_token") from exc
+        player = lookup_player_by_clerk_user_id(DATABASE_URL, str(claims["sub"]))
+        if player is None:
+            raise HTTPException(status_code=404, detail="no_profile")
+        return _account_response(player)
+    player = lookup_player_by_token(bearer)
+    if player is None:
+        raise HTTPException(status_code=401, detail="invalid_token")
+    return _account_response(player)
+
+
+@app.patch("/v1/accounts/me", response_model=AccountResponse)
+def accounts_me_update(
+    body: UpdateAccountRequest,
+    player=Depends(require_player),  # noqa: ANN001
+) -> AccountResponse:
+    if body.display_name is None and not body.complete_onboarding:
+        raise HTTPException(status_code=422, detail="nothing_to_update")
+    try:
+        updated = player
+        if body.display_name is not None:
+            updated = update_player_display_name(DATABASE_URL, player.id, body.display_name)
+        if body.complete_onboarding:
+            updated = complete_player_onboarding(DATABASE_URL, updated.id)
+    except DisplayNameTakenError as exc:
+        raise HTTPException(status_code=409, detail="display_name_taken") from exc
+    except psycopg.Error as exc:
+        raise HTTPException(status_code=503, detail="storage_unavailable") from exc
+    return _account_response(updated)
 
 
 @app.post("/v1/accounts/clerk/sync", response_model=AccountResponse)
@@ -139,14 +192,15 @@ def accounts_clerk_sync(
     try:
         existing = lookup_player_by_clerk_user_id(DATABASE_URL, clerk_user_id)
         if existing is not None:
-            return AccountResponse(player_id=existing.id, display_name=existing.display_name)
-        display_name = display_name_from_clerk_claims(claims, body.display_name)
-        player = upsert_player_for_clerk(DATABASE_URL, clerk_user_id, display_name)
+            return _account_response(existing)
+        if not body.display_name:
+            raise HTTPException(status_code=428, detail="profile_required")
+        player = upsert_player_for_clerk(DATABASE_URL, clerk_user_id, body.display_name)
     except DisplayNameTakenError as exc:
         raise HTTPException(status_code=409, detail="display_name_taken") from exc
     except psycopg.Error as exc:
         raise HTTPException(status_code=503, detail="storage_unavailable") from exc
-    return AccountResponse(player_id=player.id, display_name=player.display_name)
+    return _account_response(player)
 
 
 @app.post("/v1/accounts/clerk/link", response_model=AccountResponse)
@@ -165,7 +219,7 @@ def accounts_clerk_link(
         raise HTTPException(status_code=409, detail="clerk_already_linked") from exc
     except psycopg.Error as exc:
         raise HTTPException(status_code=503, detail="storage_unavailable") from exc
-    return AccountResponse(player_id=player.id, display_name=player.display_name)
+    return _account_response(player)
 
 
 @app.get("/v1/accounts/me/bests", response_model=PersonalBestsResponse)
@@ -195,6 +249,7 @@ def accounts_me_bests(player=Depends(require_player)) -> PersonalBestsResponse: 
 def leaderboard(
     difficulty_id: Annotated[str, Query(alias="difficultyId", min_length=1)],
     limit: Annotated[int, Query(ge=1, le=50)] = 10,
+    _rate_limit: None = Depends(rate_limit_dependency("leaderboard")),
 ) -> LeaderboardResponse:
     if difficulty_id not in DIFFICULTIES:
         raise HTTPException(status_code=404, detail="unknown_difficulty")
@@ -247,6 +302,7 @@ def _daily_board_entries(day: date, boards: dict[str, int]) -> list[DailyBoardEn
 def daily_leaderboard(
     difficulty_id: Annotated[str, Query(alias="difficultyId", min_length=1)],
     limit: Annotated[int, Query(ge=1, le=50)] = 10,
+    _rate_limit: None = Depends(rate_limit_dependency("leaderboard")),
 ) -> DailyLeaderboardResponse:
     if difficulty_id not in DIFFICULTIES:
         raise HTTPException(status_code=404, detail="unknown_difficulty")

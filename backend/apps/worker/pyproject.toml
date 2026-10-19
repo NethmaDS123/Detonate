@@ -9,7 +9,7 @@ dependencies = [
 ]
 
 [project.scripts]
-detonate-worker = "detonate_worker.daily:main"
+detonate-worker = "detonate_worker.cli:main"
 
 [build-system]
 requires = ["hatchling"]

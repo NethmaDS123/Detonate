@@ -4,8 +4,10 @@ import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { useAccount } from "@/components/AccountProvider";
 import { PersonalBestsPanel } from "@/components/PersonalBestsPanel";
+import { updateAccount } from "@/lib/account";
 import { ApiError } from "@/lib/api";
-import { isClerkEnabled } from "@/lib/clerkEnabled";
+import { ClerkSignInPrompt } from "@/components/OnboardingFlow";
+import { isClerkEnabled, isClerkOnlyAuth } from "@/lib/clerkEnabled";
 
 const NAME_PATTERN = /^[A-Za-z0-9_]{2,24}$/;
 
@@ -77,12 +79,20 @@ export function AccountView() {
           </div>
         </section>
         <PersonalBestsPanel token={token} />
-        {clerkAuth ? <LegacyLinkForm /> : !newToken ? <TokenPanel token={token} /> : null}
+        {clerkAuth ? (
+          !isClerkOnlyAuth() ? <LegacyLinkForm /> : null
+        ) : !newToken ? (
+          <TokenPanel token={token} />
+        ) : null}
+        {clerkAuth && token ? <UsernameEditor token={token} initialName={account.displayName} /> : null}
       </div>
     );
   }
 
   if (clerkAuth) {
+    if (isClerkOnlyAuth()) {
+      return <ClerkSignInPrompt />;
+    }
     return (
       <div className="mx-auto flex max-w-md flex-col gap-6">
         <div>
@@ -97,9 +107,6 @@ export function AccountView() {
           <Link href="/sign-in" className="btn btn-primary text-center">
             Continue with Google
           </Link>
-          <p className="text-xs text-[var(--muted)]">
-            Configure Google OAuth in your Clerk dashboard for this environment.
-          </p>
         </section>
       </div>
     );
@@ -118,6 +125,54 @@ export function AccountView() {
       <RegisterForm onCreated={setNewToken} />
       <SignInForm />
     </div>
+  );
+}
+
+function UsernameEditor({ token, initialName }: { token: string; initialName: string }) {
+  const { retry } = useAccount();
+  const [name, setName] = useState(initialName);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const trimmed = name.trim();
+    if (!NAME_PATTERN.test(trimmed)) {
+      setError("Use 2–24 letters, numbers, or underscores.");
+      return;
+    }
+    if (trimmed === initialName) return;
+    setBusy(true);
+    setError(null);
+    setSaved(false);
+    try {
+      await updateAccount(token, { displayName: trimmed });
+      setSaved(true);
+      retry();
+    } catch (err) {
+      setError(describeError(err, "register"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="card flex flex-col gap-3 p-6" noValidate>
+      <div>
+        <h2 className="font-medium">Username</h2>
+        <p className="mt-1 text-sm text-[var(--muted)]">Shown on verified leaderboard entries.</p>
+      </div>
+      <label className="flex flex-col gap-1.5 text-sm">
+        Display name
+        <input className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={24} />
+      </label>
+      {error ? <p className="text-xs text-[var(--accent)]">{error}</p> : null}
+      {saved ? <p className="text-xs text-emerald-400">Saved.</p> : null}
+      <button type="submit" className="btn btn-sm w-fit" disabled={busy}>
+        {busy ? "Saving…" : "Save username"}
+      </button>
+    </form>
   );
 }
 

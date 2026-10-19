@@ -1,0 +1,33 @@
+# Optional: publish daily seeds to Redis when you do not run the Compose scheduler.
+# Set repository secret REDIS_URL (same value as production API).
+
+name: Daily worker
+
+on:
+  schedule:
+    - cron: "5 0 * * *"
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Publish today's daily boards
+        working-directory: backend
+        env:
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+        run: |
+          if [ -z "$REDIS_URL" ]; then
+            echo "REDIS_URL secret is not set; skipping publish."
+            exit 0
+          fi
+          uv sync --all-packages
+          uv run --package detonate-worker detonate-worker once

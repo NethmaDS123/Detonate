@@ -2,15 +2,22 @@
 
 import { createContext, useContext } from "react";
 
-export type AccountStatus = "loading" | "guest" | "signed_in" | "offline";
+export type AccountStatus =
+  | "loading"
+  | "guest"
+  | "signed_in"
+  | "offline"
+  | "needs_profile"
+  | "needs_onboarding";
 
 export type AccountContextValue = {
   status: AccountStatus;
-  account: { playerId: string; displayName: string } | null;
+  account: { playerId: string; displayName: string; onboardingCompleted: boolean } | null;
   token: string | null;
   authMode: "legacy" | "clerk";
   signIn: (token: string) => Promise<void>;
   register: (displayName: string) => Promise<string>;
+  completeOnboarding: () => Promise<void>;
   signOut: () => void;
   retry: () => void;
 };
