@@ -19,8 +19,9 @@ export default async function PlayPage({ searchParams }: PageProps<"/play">) {
   const gameKey = `${difficulty.id}:${initialSeed}`;
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-5 sm:gap-8">
       <PageHeader
+        dense
         eyebrow="Classic"
         title={shared && seedFromLink != null ? "Shared board" : "Fresh board, every time"}
         description={

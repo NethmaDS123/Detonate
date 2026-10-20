@@ -27,8 +27,9 @@ export default async function DailyPage({ searchParams }: PageProps<"/daily">) {
   }
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-5 sm:gap-8">
       <PageHeader
+        dense
         eyebrow={`Daily #${dailyNumber}`}
         title="Today's board"
         description={description}

@@ -2,7 +2,7 @@
 
 import { DIFFICULTIES, Game, type Cell, type Event, type Status } from "@detonate/engine";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { useAccount } from "@/components/AccountProvider";
 import { DailyBranding } from "@/components/DailyBranding";
 import { Leaderboard } from "@/components/Leaderboard";
@@ -39,6 +39,19 @@ function statusLabel(status: Status): string {
   if (status === "lost") return "Detonated";
   if (status === "in_progress") return "Don't.";
   return "Click any cell";
+}
+
+/** Narrow viewports only — laptops and monitors keep the desktop layout. */
+function useMobileViewport() {
+  const [mobile, setMobile] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 639px)");
+    const update = () => setMobile(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+  return mobile;
 }
 
 function verifySummary(
@@ -129,6 +142,7 @@ export function GameClient({
 }) {
   const difficulty = DIFFICULTIES[difficultyId] ?? DIFFICULTIES.beginner;
   const { status: accountStatus, account, token } = useAccount();
+  const isMobile = useMobileViewport();
 
   const [initial] = useState(() => {
     if (initialSeed === undefined) return { game: null, view: null };
@@ -149,6 +163,13 @@ export function GameClient({
     dailyNumber: number;
     bestDurationMs: number | null;
   } | null>(null);
+  const [flagMode, setFlagMode] = useState(false);
+  const [zoom, setZoom] = useState<"auto" | number>("auto");
+  const [boardOverflows, setBoardOverflows] = useState(false);
+  const frameRef = useRef<HTMLDivElement>(null);
+  const boardRef = useRef<HTMLDivElement>(null);
+  const flagging = isMobile && flagMode;
+  const activeZoom = isMobile ? zoom : "auto";
 
   const deal = useCallback(
     (seed: number, date: string | null) => {
@@ -182,6 +203,22 @@ export function GameClient({
   useEffect(() => {
     if (boardKind === "daily") void requestDaily();
   }, [boardKind, requestDaily]);
+
+  useEffect(() => {
+    if (!isMobile) return;
+    const frame = frameRef.current;
+    if (!frame) return;
+    const update = () => {
+      setBoardOverflows(
+        frame.scrollWidth > frame.clientWidth + 1 || frame.scrollHeight > frame.clientHeight + 1,
+      );
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(frame);
+    if (boardRef.current) observer.observe(boardRef.current);
+    return () => observer.disconnect();
+  }, [isMobile, activeZoom, view, difficulty.width, difficulty.height]);
 
   useEffect(() => {
     if (boardKind !== "daily" || leaderboardTick === 0) return;
@@ -306,11 +343,37 @@ export function GameClient({
   const cellSize = CELL_SIZE[difficulty.id] ?? 28;
   const playAgainLabel = boardKind === "daily" ? "Replay daily" : "New board";
 
+  function zoomBy(delta: number) {
+    const cell = boardRef.current?.querySelector("button");
+    const current = cell ? cell.getBoundingClientRect().width : typeof zoom === "number" ? zoom : 32;
+    setZoom(Math.round(Math.min(52, Math.max(12, current + delta))));
+  }
+
+  function fitBoard() {
+    if (activeZoom !== "auto") {
+      setZoom("auto");
+      return;
+    }
+    const frame = frameRef.current;
+    if (!frame) return;
+    const inner = frame.clientWidth - 18;
+    const size = Math.floor((inner - 2 * (difficulty.width - 1)) / difficulty.width);
+    setZoom(Math.max(8, Math.min(52, size)));
+  }
+
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
       <section className="flex min-w-0 flex-col items-center">
-        <div className="flex w-min max-w-full flex-col gap-3">
-          <div className="card flex items-center justify-between gap-6 px-4 py-2.5">
+        <div
+          className={
+            isMobile
+              ? "flex w-full min-w-0 flex-col gap-3"
+              : "flex w-min max-w-full flex-col gap-3"
+          }
+        >
+          <div
+            className={`card flex items-center justify-between px-4 py-2.5 ${isMobile ? "gap-3" : "gap-6"}`}
+          >
             <div>
               <p className="eyebrow text-[10px]">Mines</p>
               <p className="font-mono text-lg tabular-nums">
@@ -318,10 +381,12 @@ export function GameClient({
               </p>
             </div>
             <p
-              className={`whitespace-nowrap text-sm font-medium ${view.status === "lost" ? "text-[var(--accent)]" : view.status === "won" ? "text-emerald-400" : "text-[var(--muted)]"}`}
+              className={`text-sm font-medium ${isMobile ? "text-center" : "whitespace-nowrap"} ${view.status === "lost" ? "text-[var(--accent)]" : view.status === "won" ? "text-emerald-400" : "text-[var(--muted)]"}`}
               aria-live="polite"
             >
-              {statusLabel(view.status)}
+              {view.status === "ready" && isMobile
+                ? "Tap any cell"
+                : statusLabel(view.status)}
             </p>
             <div className="text-right">
               <p className="eyebrow text-[10px]">Time</p>
@@ -329,36 +394,119 @@ export function GameClient({
             </div>
           </div>
 
-          <div className="max-w-full overflow-x-auto">
-            <div
-              role="group"
-              aria-label={`${difficulty.label} board`}
-              className="card inline-grid gap-[2px] p-2"
-              style={{
-                gridTemplateColumns: `repeat(${difficulty.width}, ${cellSize}px)`,
-                gridAutoRows: `${cellSize}px`,
-              }}
-              onContextMenu={(e) => e.preventDefault()}
-            >
-              {view.grid.map((row, y) =>
-                row.map((cell, x) => (
-                  <CellView
-                    key={`${x}-${y}`}
-                    x={x}
-                    y={y}
-                    revealed={cell.revealed}
-                    flagged={cell.flagged}
-                    isMine={cell.isMine}
-                    adjacent={cell.adjacent}
-                    status={view.status}
-                    size={cellSize}
-                    onReveal={onReveal}
-                    onFlag={onFlag}
-                  />
-                )),
-              )}
+          {isMobile ? (
+            <div className="flex items-center justify-between gap-2">
+              <div className="segmented segmented-toggle" role="group" aria-label="Touch action">
+                <button
+                  type="button"
+                  className="segmented-item"
+                  aria-pressed={!flagging}
+                  onClick={() => setFlagMode(false)}
+                >
+                  Reveal
+                </button>
+                <button
+                  type="button"
+                  className="segmented-item"
+                  aria-pressed={flagging}
+                  onClick={() => setFlagMode(true)}
+                >
+                  Flag
+                </button>
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  className="btn btn-sm px-2.5"
+                  aria-label="Smaller cells"
+                  disabled={typeof activeZoom === "number" && activeZoom <= 12}
+                  onClick={() => zoomBy(-4)}
+                >
+                  −
+                </button>
+                <button type="button" className="btn btn-sm" onClick={fitBoard}>
+                  {activeZoom === "auto" ? "Fit" : "Auto"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm px-2.5"
+                  aria-label="Larger cells"
+                  disabled={typeof activeZoom === "number" && activeZoom >= 52}
+                  onClick={() => zoomBy(4)}
+                >
+                  +
+                </button>
+              </div>
             </div>
-          </div>
+          ) : null}
+
+          {isMobile ? (
+            <div ref={frameRef} className="mine-frame w-full min-w-0 overflow-auto">
+              <div
+                ref={boardRef}
+                role="group"
+                aria-label={`${difficulty.label} board`}
+                className={`mine-board card p-2 ${flagging ? "ring-1 ring-[var(--accent)]" : ""}`}
+                data-zoomed={activeZoom === "auto" ? undefined : ""}
+                style={
+                  {
+                    "--cols": difficulty.width,
+                    ...(typeof activeZoom === "number" ? { "--cell": `${activeZoom}px` } : {}),
+                  } as CSSProperties
+                }
+                onContextMenu={(e) => e.preventDefault()}
+              >
+                {view.grid.map((row, y) =>
+                  row.map((cell, x) => (
+                    <MobileCellView
+                      key={`${x}-${y}`}
+                      x={x}
+                      y={y}
+                      revealed={cell.revealed}
+                      flagged={cell.flagged}
+                      isMine={cell.isMine}
+                      adjacent={cell.adjacent}
+                      status={view.status}
+                      flagMode={flagging}
+                      onReveal={onReveal}
+                      onFlag={onFlag}
+                    />
+                  )),
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="max-w-full overflow-x-auto">
+              <div
+                role="group"
+                aria-label={`${difficulty.label} board`}
+                className="card inline-grid gap-[2px] p-2"
+                style={{
+                  gridTemplateColumns: `repeat(${difficulty.width}, ${cellSize}px)`,
+                  gridAutoRows: `${cellSize}px`,
+                }}
+                onContextMenu={(e) => e.preventDefault()}
+              >
+                {view.grid.map((row, y) =>
+                  row.map((cell, x) => (
+                    <DesktopCellView
+                      key={`${x}-${y}`}
+                      x={x}
+                      y={y}
+                      revealed={cell.revealed}
+                      flagged={cell.flagged}
+                      isMine={cell.isMine}
+                      adjacent={cell.adjacent}
+                      status={view.status}
+                      size={cellSize}
+                      onReveal={onReveal}
+                      onFlag={onFlag}
+                    />
+                  )),
+                )}
+              </div>
+            </div>
+          )}
 
           {finished ? (
             <ResultCard
@@ -383,7 +531,13 @@ export function GameClient({
           ) : (
             <div className="flex flex-col gap-2 text-xs text-[var(--muted)]">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <span>Left-click reveals · right-click flags · click a number to chord</span>
+                <span>
+                  {isMobile
+                    ? flagging
+                      ? "Flag mode — tap a covered cell to flag or unflag."
+                      : `Tap to reveal · hold to flag · tap a number to chord${boardOverflows ? " · drag to pan" : ""}`
+                    : "Left-click reveals · right-click flags · click a number to chord"}
+                </span>
                 <button type="button" className="btn btn-sm" onClick={newBoard}>
                   {boardKind === "daily" ? "Restart" : "New board"}
                 </button>
@@ -534,7 +688,7 @@ function ResultCard({
   );
 }
 
-function CellView({
+function DesktopCellView({
   x,
   y,
   revealed,
@@ -594,6 +748,142 @@ function CellView({
       onContextMenu={(e) => {
         e.preventDefault();
         onFlag(x, y);
+      }}
+    >
+      {content}
+    </button>
+  );
+}
+
+function MobileCellView({
+  x,
+  y,
+  revealed,
+  flagged,
+  isMine,
+  adjacent,
+  status,
+  flagMode,
+  onReveal,
+  onFlag,
+}: {
+  x: number;
+  y: number;
+  revealed: boolean;
+  flagged: boolean;
+  isMine: boolean;
+  adjacent: number;
+  status: Status;
+  flagMode: boolean;
+  onReveal: (x: number, y: number) => void;
+  onFlag: (x: number, y: number) => void;
+}) {
+  const press = useRef<{
+    id: number;
+    x: number;
+    y: number;
+    timer: number | null;
+    moved: boolean;
+    held: boolean;
+    touch: boolean;
+  } | null>(null);
+  const fromTouch = useRef(false);
+  const finished = status === "won" || status === "lost";
+
+  function act() {
+    if (flagMode && !revealed) onFlag(x, y);
+    else onReveal(x, y);
+  }
+
+  function clearTimer() {
+    if (press.current?.timer != null) {
+      window.clearTimeout(press.current.timer);
+      press.current.timer = null;
+    }
+  }
+
+  let content = "";
+  let className =
+    "mine-cell flex items-center justify-center rounded-[3px] font-mono font-semibold select-none";
+
+  if (!revealed) {
+    className += " bg-[#2b2622] shadow-[inset_0_-2px_0_rgba(0,0,0,0.35)]";
+    if (!finished) className += " mine-cell-live";
+    if (flagged) {
+      content = "⚑";
+      className += " text-[var(--accent)]";
+    }
+  } else if (isMine) {
+    content = "●";
+    className +=
+      status === "lost"
+        ? " bg-[var(--accent)] text-[#1a0f0c]"
+        : " bg-[#2b2622] text-[var(--accent)]";
+  } else {
+    className += " bg-[#14110f]";
+    if (adjacent > 0) {
+      content = String(adjacent);
+      className += ` cell-num-${adjacent}`;
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      aria-label={`Row ${y + 1}, column ${x + 1}${flagged ? ", flagged" : ""}`}
+      className={className}
+      disabled={finished}
+      onPointerDown={(event) => {
+        fromTouch.current = event.pointerType !== "mouse";
+        if (event.button !== 0 && !fromTouch.current) return;
+        clearTimer();
+        const touch = event.pointerType !== "mouse";
+        const timer = touch
+          ? window.setTimeout(() => {
+              if (!press.current || press.current.moved || revealed) return;
+              press.current.held = true;
+              onFlag(x, y);
+            }, 400)
+          : null;
+        press.current = {
+          id: event.pointerId,
+          x: event.clientX,
+          y: event.clientY,
+          timer,
+          moved: false,
+          held: false,
+          touch,
+        };
+      }}
+      onPointerMove={(event) => {
+        const current = press.current;
+        if (!current || current.id !== event.pointerId) return;
+        const dx = event.clientX - current.x;
+        const dy = event.clientY - current.y;
+        if (dx * dx + dy * dy > 64) {
+          current.moved = true;
+          clearTimer();
+        }
+      }}
+      onPointerUp={(event) => {
+        const current = press.current;
+        if (!current || current.id !== event.pointerId) return;
+        clearTimer();
+        press.current = null;
+        if (!current.touch || current.moved || current.held) return;
+        act();
+      }}
+      onPointerCancel={() => {
+        clearTimer();
+        press.current = null;
+      }}
+      onClick={() => {
+        if (fromTouch.current) return;
+        act();
+      }}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        if (!fromTouch.current) onFlag(x, y);
       }}
     >
       {content}

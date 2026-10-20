@@ -27,7 +27,7 @@ Repository: [github.com/NethmaDS123/Detonate](https://github.com/NethmaDS123/Det
 ### Shipped
 
 - Browser Minesweeper with **Beginner** (9×9, 10 mines), **Intermediate** (16×16, 40), and **Expert** (30×16, 99).
-- Standard controls: left-click reveal, right-click flag, chord on a revealed number when adjacent flags match.
+- Standard controls: click or tap to reveal, right-click or long-press to flag, chord on a revealed number when adjacent flags match. Small screens get **Flag mode**, drag-to-pan, and cell zoom so Expert stays playable in a phone browser.
 - **Safe first click** — mines are placed after the opening click; the clicked cell and its neighbors (when possible) are never mines.
 - **Seeded boards** — same seed yields the same mine field; new board generates a new seed.
 - Mine counter, timer, win/loss handling (auto-flag on win, reveal mines on loss).

@@ -38,6 +38,6 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
   {
     id: "controls",
     title: "How to play",
-    body: "Left-click to reveal, right-click to flag, click a revealed number to chord when adjacent flags match. First click is always safe.",
+    body: "Click or tap to reveal. Right-click, long-press, or Flag mode to flag. Tap a revealed number to chord when the adjacent flags match. The first click is always safe. On a small screen, drag the board to pan and use + to enlarge cells.",
   },
 ];
